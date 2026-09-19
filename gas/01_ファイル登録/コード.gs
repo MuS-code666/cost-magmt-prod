@@ -4,6 +4,11 @@
  * Excelファイルを受け取り、
  * Googleスプレッドシートへ一時変換した後、
  * 先頭シートの内容をCSV化して所定のフォルダへ保存する。
+ *
+ * アップロード先フォルダ・対象期間の粒度（月次/年度）は
+ * 「取込_設定シート」スプレッドシートの「アップロード設定」シートで管理する。
+ * ソース種別を追加・変更する場合はこのシートを編集するだけでよく、
+ * 本コードやindex.htmlの修正は不要。
  */
 
 // =====================================================
@@ -13,12 +18,8 @@
 const CONFIG = {
   TIMEZONE: 'Asia/Tokyo',
 
-  FOLDER_IDS: {
-    '売上': '1-o6BBUyPxSTenYbB4Uy1Vpho3xwifTzD',
-    '原価': '1cemGBB3z0yZNXDOWPjVKUkO-49eMZdeP',
-    '生産': '1RoXiMmcHrW5a0K2xNsKDglf2hu_n6YSo',
-    '月報': '1C5kkeROQ3akC8NXUdtcc2xu7AWkIMpUD'
-  },
+  SOURCE_CONFIG_SPREADSHEET_ID: '1mjxPFb9GcbaG780duU6xfTqX0bo3nse4_8S87w8WFOE',
+  SOURCE_CONFIG_SHEET_NAME: 'アップロード設定',
 
   GOOGLE_SHEET_MIME:
     'application/vnd.google-apps.spreadsheet',
@@ -39,8 +40,25 @@ const CONFIG = {
 // =====================================================
 
 function doGet() {
-  return HtmlService
-    .createHtmlOutputFromFile('index')
+
+  const template =
+    HtmlService.createTemplateFromFile('index');
+
+  const sourceConfigMap =
+    getSourceConfigMap_();
+
+  template.sourceConfigJson =
+    JSON.stringify(
+      Object.keys(sourceConfigMap).map(function(sourceType) {
+        return {
+          sourceType: sourceType,
+          isAnnual: sourceConfigMap[sourceType].isAnnual
+        };
+      })
+    );
+
+  return template
+    .evaluate()
     .setTitle('原価管理システム-ファイル登録');
 }
 
@@ -59,35 +77,65 @@ function uploadFile(formObject) {
     // 二重登録防止
     lock.waitLock(30000);
 
+    const sourceConfigMap = getSourceConfigMap_();
+
     // 入力チェック
-    validateForm_(formObject);
+    validateForm_(formObject, sourceConfigMap);
 
     const sourceType = formObject.sourceType;
-    const targetMonth = formObject.targetMonth;
+    const sourceConfig = sourceConfigMap[sourceType];
     const fileBlob = formObject.uploadFile;
-
-    const folderId = CONFIG.FOLDER_IDS[sourceType];
+    const folderId = sourceConfig.folderId;
     const originalFileName = fileBlob.getName();
 
-    // 対象年月
-    const targetYYYYMM = convertTargetMonth_(targetMonth);
+    // 対象期間（月次: YYYYMM / 年度: YYYY）
+    const targetPeriod = convertTargetPeriod_(
+      formObject.targetMonth,
+      sourceConfig.isAnnual
+    );
 
-    // 登録日
-    const uploadDate = Utilities.formatDate(
+    // 登録日時（同日の再アップロードでもファイル名が衝突しないよう秒まで含める）
+    const registeredAt = Utilities.formatDate(
       new Date(),
       CONFIG.TIMEZONE,
-      'MMdd'
+      'yyyyMMdd_HHmmss'
     );
 
     // 出力ファイル名
     const outputFileName =
-      `${sourceType}_${targetYYYYMM}_${uploadDate}.csv`;
+      `${sourceType}_${targetPeriod}_${registeredAt}.csv`;
 
-    // 同名ファイル確認
-    if (fileExists_(folderId, outputFileName)) {
+    // ---------------------------------------------------
+    // 同一ソース種別×対象期間の既存ファイル確認
+    //
+    // ファイル名の完全一致ではなく、「同じソース種別・同じ対象期間」の
+    // ファイルが既に存在するかどうかで判定する。
+    // 登録日時が異なるだけで同日中の訂正アップロードを誤って
+    // ブロックしないようにするため。
+    //
+    // 既存ファイルがある場合は自動で拒否・自動で上書きのどちらも行わず、
+    // 利用者に確認を求める（confirmOverwrite === 'true' で再送された
+    // 場合のみ追加登録を許可する）。
+    // ---------------------------------------------------
+    const existingFiles = findFilesForPeriod_(
+      folderId,
+      sourceType,
+      targetPeriod
+    );
+
+    if (
+      existingFiles.length > 0 &&
+      formObject.confirmOverwrite !== 'true'
+    ) {
       return {
         success: false,
-        message: '同名のファイルが既に登録されています。'
+        duplicatePeriod: true,
+        message:
+          `対象期間「${formObject.targetMonth}」の${sourceType}データは、` +
+          `既に${existingFiles.length}件登録されています` +
+          `（例: ${existingFiles[0]}）。追加登録しますか？` +
+          '（既存ファイルは自動的には削除されません）',
+        existingFiles: existingFiles
       };
     }
 
@@ -175,15 +223,13 @@ function uploadFile(formObject) {
     }
 
     /*
-     * getDisplayValues() を使うことで、
-     * Excel上で表示されている値に近い形でCSV化する。
+     * getValues() で生の値（Date／数値／文字列）を取得し、
+     * 型に応じて明示的にテキスト化する（cellValueToText_）。
      *
-     * 例：
-     * 2026/09/05
-     * 10.5%
-     * ¥1,000
-     *
-     * など。
+     * getDisplayValues() はExcelのセル表示形式（%表示・桁区切り・
+     * 通貨記号・日付書式など）にそのまま依存してしまい、元データの
+     * 書式が変わると中間S生成側の正規化ロジックで解釈できなくなる
+     * リスクがあったため、生値からの明示変換に変更している。
      */
     const values =
       sheet
@@ -193,7 +239,7 @@ function uploadFile(formObject) {
           lastRow,
           lastColumn
         )
-        .getDisplayValues();
+        .getValues();
 
     // =================================================
     // CSV文字列生成
@@ -305,6 +351,72 @@ function uploadFile(formObject) {
 
 
 // =====================================================
+// アップロード設定（ソース種別 → フォルダID／期間区分）
+//
+// 「取込_設定シート」スプレッドシート内の「アップロード設定」シートを
+// 単一の設定源とする。列構成：
+//   A列: ソース種別（例：売上／原価／生産／月報／売上予算／原価予算）
+//   B列: アップロード先フォルダID
+//   C列: 区分（"月次" または "年度"）
+// =====================================================
+
+function getSourceConfigMap_() {
+
+  const ss =
+    SpreadsheetApp.openById(
+      CONFIG.SOURCE_CONFIG_SPREADSHEET_ID
+    );
+
+  const sheet =
+    ss.getSheetByName(
+      CONFIG.SOURCE_CONFIG_SHEET_NAME
+    );
+
+  if (!sheet) {
+    throw new Error(
+      `設定シート「${CONFIG.SOURCE_CONFIG_SHEET_NAME}」が見つかりません。`
+    );
+  }
+
+  const values =
+    sheet.getDataRange().getValues();
+
+  const map = {};
+
+  for (let r = 1; r < values.length; r++) {
+
+    const sourceType = trimText_(values[r][0]);
+    const folderId = trimText_(values[r][1]);
+    const periodType = trimText_(values[r][2]);
+
+    if (!sourceType) {
+      continue;
+    }
+
+    if (!folderId) {
+      throw new Error(
+        `「${CONFIG.SOURCE_CONFIG_SHEET_NAME}」シート${r + 1}行目: ` +
+        `アップロード先フォルダIDが空欄です（${sourceType}）。`
+      );
+    }
+
+    map[sourceType] = {
+      folderId: folderId,
+      isAnnual: periodType === '年度'
+    };
+  }
+
+  if (Object.keys(map).length === 0) {
+    throw new Error(
+      `「${CONFIG.SOURCE_CONFIG_SHEET_NAME}」シートに有効な設定がありません。`
+    );
+  }
+
+  return map;
+}
+
+
+// =====================================================
 // CSV変換
 // =====================================================
 
@@ -316,7 +428,9 @@ function convertArrayToCsv_(values) {
       return row
         .map(function(value) {
 
-          return escapeCsvValue_(value);
+          return escapeCsvValue_(
+            cellValueToText_(value)
+          );
 
         })
         .join(',');
@@ -326,21 +440,50 @@ function convertArrayToCsv_(values) {
 }
 
 
-// =====================================================
-// CSVセルのエスケープ
-// =====================================================
-
-function escapeCsvValue_(value) {
+/**
+ * セルの生の値を、型に応じてCSV用テキストへ変換する。
+ * Excelの表示形式（書式設定）には依存させない。
+ */
+function cellValueToText_(value) {
 
   if (
     value === null ||
-    value === undefined
+    value === undefined ||
+    value === ''
   ) {
     return '';
   }
 
-  let text =
-    String(value);
+  if (
+    Object.prototype.toString.call(value) === '[object Date]' &&
+    !isNaN(value)
+  ) {
+
+    const hasTime =
+      value.getHours() !== 0 ||
+      value.getMinutes() !== 0 ||
+      value.getSeconds() !== 0;
+
+    return Utilities.formatDate(
+      value,
+      CONFIG.TIMEZONE,
+      hasTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd'
+    );
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+
+  return String(value);
+}
+
+
+// =====================================================
+// CSVセルのエスケープ
+// =====================================================
+
+function escapeCsvValue_(text) {
 
   /*
    * CSV仕様：
@@ -384,7 +527,7 @@ function escapeCsvValue_(value) {
 // 入力チェック
 // =====================================================
 
-function validateForm_(formObject) {
+function validateForm_(formObject, sourceConfigMap) {
 
   if (!formObject) {
     throw new Error(
@@ -419,12 +562,10 @@ function validateForm_(formObject) {
     );
   }
 
-  if (
-    !Object.prototype.hasOwnProperty.call(
-      CONFIG.FOLDER_IDS,
-      formObject.sourceType
-    )
-  ) {
+  const sourceConfig =
+    sourceConfigMap[formObject.sourceType];
+
+  if (!sourceConfig) {
     throw new Error(
       'ソース種別が正しくありません。'
     );
@@ -432,20 +573,22 @@ function validateForm_(formObject) {
 
   if (!formObject.targetMonth) {
     throw new Error(
-      '対象年月を入力してください。'
+      sourceConfig.isAnnual
+        ? '対象年度を選択してください。'
+        : '対象年月を選択してください。'
     );
   }
 
-  const monthPattern =
-    /^\d{4}年-(0[1-9]|1[0-2])月$/;
+  const pattern =
+    sourceConfig.isAnnual
+      ? /^\d{4}年度$/
+      : /^\d{4}年-(0[1-9]|1[0-2])月$/;
 
-  if (
-    !monthPattern.test(
-      formObject.targetMonth
-    )
-  ) {
+  if (!pattern.test(formObject.targetMonth)) {
     throw new Error(
-      '対象年月は「2026年-09月」の形式で入力してください。'
+      sourceConfig.isAnnual
+        ? '対象年度は「2026年度」の形式で入力してください。'
+        : '対象年月は「2026年-09月」の形式で入力してください。'
     );
   }
 }
@@ -491,14 +634,27 @@ function getExcelMimeType_(fileName) {
 
 
 // =====================================================
-// 年月変換
+// 対象期間変換
 //
-// 2026年-09月
-// ↓
-// 202609
+// 月次： 2026年-09月 → 202609
+// 年度： 2026年度     → 2026
 // =====================================================
 
-function convertTargetMonth_(targetMonth) {
+function convertTargetPeriod_(targetMonth, isAnnual) {
+
+  if (isAnnual) {
+
+    const match =
+      targetMonth.match(/^(\d{4})年度$/);
+
+    if (!match) {
+      throw new Error(
+        '対象年度の形式が正しくありません。'
+      );
+    }
+
+    return match[1];
+  }
 
   const match =
     targetMonth.match(
@@ -516,20 +672,23 @@ function convertTargetMonth_(targetMonth) {
 
 
 // =====================================================
-// 同名ファイル存在チェック
+// 同一ソース種別×対象期間の既存ファイル検索
 // =====================================================
 
-function fileExists_(folderId, fileName) {
+function findFilesForPeriod_(folderId, sourceType, targetPeriod) {
 
-  const escapedName =
-    escapeDriveQuery_(fileName);
+  const prefix =
+    sourceType + '_' + targetPeriod + '_';
+
+  const escapedPrefix =
+    escapeDriveQuery_(prefix);
 
   const escapedFolderId =
     escapeDriveQuery_(folderId);
 
   const query =
     `'${escapedFolderId}' in parents ` +
-    `and name = '${escapedName}' ` +
+    `and name contains '${escapedPrefix}' ` +
     `and trashed = false`;
 
   const result =
@@ -541,7 +700,7 @@ function fileExists_(folderId, fileName) {
         'files(id,name)',
 
       pageSize:
-        1,
+        50,
 
       supportsAllDrives:
         true,
@@ -550,10 +709,17 @@ function fileExists_(folderId, fileName) {
         true
     });
 
-  return (
-    result.files &&
-    result.files.length > 0
-  );
+  const files =
+    result.files || [];
+
+  // "contains"は部分一致のため、前方一致であることを念のため再確認する
+  return files
+    .filter(function(f) {
+      return f.name.indexOf(prefix) === 0;
+    })
+    .map(function(f) {
+      return f.name;
+    });
 }
 
 
@@ -572,6 +738,20 @@ function escapeDriveQuery_(value) {
       /'/g,
       "\\'"
     );
+}
+
+
+// =====================================================
+// 文字列化＋trim
+// =====================================================
+
+function trimText_(value) {
+
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return String(value).trim();
 }
 
 
