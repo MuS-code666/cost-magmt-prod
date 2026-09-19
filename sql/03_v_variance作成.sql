@@ -22,6 +22,23 @@
 --        - Looker Studio側は target_month を必須フィルタとする
 --        - Claude MCP側はプロンプト・スキルのテンプレートで
 --          target_month 絞り込みを必須にする
+--
+-- Looker Studio Phase 4-1 対応（2026-09-19）
+-- F. 出力粒度を「年月×顧客」から「年月×製品」へ変更。
+--      - 従来の顧客粒度では、Looker Studio側で製品別・部門別の
+--        分析ができなかったため。
+--      - 顧客（customer_code / customer_name）・部門（factory_code /
+--        factory_name）は、製品マスタ（master.products）経由で
+--        1製品につき1顧客・1工場として付与する。
+--      - 原価予算（cost_budget_*）・生産実績は元々工場×マシン単位 /
+--        製品単位で計算できるため、この変更で安全に製品行へ展開できる。
+--      - 売上予算（budget_sales_amount 以下 sales_budget_* 列）は
+--        history.sales_budgets が「年月×顧客」単位でしか記録されて
+--        いないため、同一顧客の複数製品行に同じ値が複製される。
+--        製品をまたいでSUMすると水増しされるため、
+--        「顧客単位に集計する場合のみ使用可（SUMではなくAVG/MAX等で
+--        重複排除するか、顧客単位に絞り込んで参照する）」という制約が
+--        つく。Looker Studio側のフィールド説明で明示すること。
 -- ================================================================
 
 CREATE OR REPLACE VIEW `cost-mgmt-prod-507701.mart.v_variance` AS
@@ -119,34 +136,7 @@ production_by_product AS (
 
 
 /* ============================================================
-   2. 生産実績を顧客単位へ変換
-   ============================================================ */
-production_by_customer AS (
-
-  SELECT
-    pr.target_month,
-    p.customer_code,
-
-    SUM(pr.material_qty_kg) AS material_qty_kg,
-    SUM(pr.production_qty_kg) AS production_qty_kg,
-    SUM(pr.defect_qty_kg) AS defect_qty_kg,
-    SUM(pr.setup_hours) AS setup_hours,
-    SUM(pr.production_hours) AS production_hours,
-    SUM(pr.standard_hours) AS standard_hours
-
-  FROM production_by_product pr
-
-  INNER JOIN `cost-mgmt-prod-507701.master.products` p
-    ON pr.product_code = p.product_code
-
-  GROUP BY
-    pr.target_month,
-    p.customer_code
-),
-
-
-/* ============================================================
-   3. マシン／工場の稼働時間シェア（製品単位・全体）
+   2. マシン／工場の稼働時間シェア（製品単位・全体）
    production_with_totals から重複行を落とすだけ。
    ============================================================ */
 product_machine_hours AS (
@@ -195,7 +185,7 @@ factory_total_hours AS (
 
 
 /* ============================================================
-   4-A. 原価実績（行レベル、allocation_methodを付与）
+   3-A. 原価実績（行レベル、allocation_methodを付与）
    history.costs への FROM はこのCTEのみに限定する。
    ============================================================ */
 costs_base AS (
@@ -220,7 +210,7 @@ costs_base AS (
 
 
 /* ============================================================
-   4-B. 直接材料費
+   3-B. 直接材料費
    costs_base × production_base（lot_no結合）。
    対象年月は production 側（生産実施月）を正とする。
    ============================================================ */
@@ -247,7 +237,7 @@ direct_material_cost_by_product AS (
 
 
 /* ============================================================
-   4-C. 間接費（実績）
+   3-C. 間接費（実績）
    ============================================================ */
 indirect_cost AS (
 
@@ -273,7 +263,7 @@ indirect_cost AS (
 
 
 /* ============================================================
-   5. マシン単位間接費（実績）を製品へ配賦
+   4. マシン単位間接費（実績）を製品へ配賦
    ============================================================ */
 machine_allocated_cost AS (
 
@@ -309,7 +299,7 @@ machine_allocated_cost AS (
 
 
 /* ============================================================
-   6. 工場共通費（実績）を製品へ配賦
+   5. 工場共通費（実績）を製品へ配賦
    ============================================================ */
 factory_allocated_cost AS (
 
@@ -343,7 +333,7 @@ factory_allocated_cost AS (
 
 
 /* ============================================================
-   7. 間接費（実績）を製品単位へ統合
+   6. 間接費（実績）を製品単位へ統合
    ============================================================ */
 indirect_cost_by_product AS (
 
@@ -368,7 +358,7 @@ indirect_cost_by_product AS (
 
 
 /* ============================================================
-   8. 原価予算（マシン単位）
+   7. 原価予算（マシン単位）
    原価予算は費用科目を問わず、必ず工場×マシン単位で作成されている
    （原材料費であっても「生産構成で配分」済みのため、実績のような
    lot_no・DIRECT/PRODUCTION_HOURSの区別は不要）。
@@ -392,10 +382,10 @@ cost_budget_by_machine AS (
 
 
 /* ============================================================
-   9. 原価予算を製品へ配賦
+   8. 原価予算を製品へ配賦
    実績の間接費配賦と同じ基準（そのマシンの実績生産時間シェア）で
    配分する。そのため、対象月の実績生産がまだない場合（将来の
-   予算月など）は配賦できず、この月の原価予算は顧客別には
+   予算月など）は配賦できず、この月の原価予算は製品別には
    反映されない点に留意する。
    ============================================================ */
 budget_cost_by_product AS (
@@ -429,29 +419,7 @@ budget_cost_by_product AS (
 
 
 /* ============================================================
-   10. 原価予算を顧客単位へ集約
-   ============================================================ */
-budget_cost_by_customer AS (
-
-  SELECT
-    b.target_month,
-    p.customer_code,
-
-    SUM(b.allocated_budget_cost) AS budget_cost
-
-  FROM budget_cost_by_product b
-
-  INNER JOIN `cost-mgmt-prod-507701.master.products` p
-    ON b.product_code = p.product_code
-
-  GROUP BY
-    b.target_month,
-    p.customer_code
-),
-
-
-/* ============================================================
-   11-A. 売上実績（行レベル）
+   9-A. 売上実績（行レベル）
    history.sales への FROM はこのCTEのみに限定する。
    ============================================================ */
 sales_base AS (
@@ -464,22 +432,6 @@ sales_base AS (
     sales_amount
 
   FROM `cost-mgmt-prod-507701.history.sales`
-),
-
-sales_actual AS (
-
-  SELECT
-    target_month,
-    customer_code,
-
-    SUM(quantity_kg) AS sales_qty_kg,
-    SUM(sales_amount) AS actual_sales_amount
-
-  FROM sales_base
-
-  GROUP BY
-    target_month,
-    customer_code
 ),
 
 sales_by_product AS (
@@ -500,7 +452,10 @@ sales_by_product AS (
 
 
 /* ============================================================
-   11-B. 売上予算
+   9-B. 売上予算（顧客単位）
+   history.sales_budgets が「年月×顧客」でしか記録されていないため、
+   製品粒度へは配賦できない。最終結果では、この値を同一顧客の
+   全製品行へそのまま複製する（下記の最終SELECTのコメント参照）。
    ============================================================ */
 sales_budget AS (
 
@@ -519,201 +474,159 @@ sales_budget AS (
 
 
 /* ============================================================
-   11-C. 売上実績（前年同月）
+   9-C. 売上実績（前年同月・製品単位）
    target_monthを1年後ろへずらし、当年月のキーで直接結合できる形にする
    ============================================================ */
-sales_actual_prior_year AS (
+sales_by_product_prior_year AS (
 
   SELECT
     DATE_ADD(target_month, INTERVAL 1 YEAR) AS target_month,
-    customer_code,
+    product_code,
 
-    actual_sales_amount AS prior_year_sales_amount
+    sales_amount AS prior_year_sales_amount
 
-  FROM sales_actual
+  FROM sales_by_product
 ),
 
 
 /* ============================================================
-   12. 製品別採算
+   10. 製品別採算
    3つのCTEをCOALESCEキーで FULL OUTER JOIN し、
    両者のキー全体集合を1回のシャッフルで得る。
+   顧客・工場は最終SELECTで製品マスタ経由で付与するため、
+   ここでは持たない。
    ============================================================ */
 product_profit AS (
 
   SELECT
-    base.target_month,
-    base.product_code,
+    COALESCE(s.target_month, d.target_month, i.target_month)
+      AS target_month,
+    COALESCE(s.product_code, d.product_code, i.product_code)
+      AS product_code,
 
-    p.customer_code,
+    COALESCE(s.sales_qty_kg, 0) AS sales_qty_kg,
+    COALESCE(s.sales_amount, 0) AS sales_amount,
+    COALESCE(d.direct_material_cost, 0) AS direct_material_cost,
+    COALESCE(i.indirect_cost, 0) AS indirect_cost,
 
-    COALESCE(base.sales_qty_kg, 0) AS sales_qty_kg,
-    COALESCE(base.sales_amount, 0) AS sales_amount,
-    COALESCE(base.direct_material_cost, 0) AS direct_material_cost,
-    COALESCE(base.indirect_cost, 0) AS indirect_cost,
-
-    COALESCE(base.direct_material_cost, 0)
-      + COALESCE(base.indirect_cost, 0)
+    COALESCE(d.direct_material_cost, 0)
+      + COALESCE(i.indirect_cost, 0)
       AS total_cost,
 
-    COALESCE(base.sales_amount, 0)
-      - COALESCE(base.direct_material_cost, 0)
-      - COALESCE(base.indirect_cost, 0)
+    COALESCE(s.sales_amount, 0)
+      - COALESCE(d.direct_material_cost, 0)
+      - COALESCE(i.indirect_cost, 0)
       AS actual_profit
 
-  FROM (
+  FROM sales_by_product s
 
-    SELECT
-      COALESCE(s.target_month, d.target_month, i.target_month)
-        AS target_month,
-      COALESCE(s.product_code, d.product_code, i.product_code)
-        AS product_code,
+  FULL OUTER JOIN direct_material_cost_by_product d
+    ON s.target_month = d.target_month
+   AND s.product_code = d.product_code
 
-      s.sales_qty_kg,
-      s.sales_amount,
-      d.direct_material_cost,
-      i.indirect_cost
-
-    FROM sales_by_product s
-
-    FULL OUTER JOIN direct_material_cost_by_product d
-      ON s.target_month = d.target_month
-     AND s.product_code = d.product_code
-
-    FULL OUTER JOIN indirect_cost_by_product i
-      ON COALESCE(s.target_month, d.target_month) = i.target_month
-     AND COALESCE(s.product_code, d.product_code) = i.product_code
-
-  ) base
-
-  LEFT JOIN `cost-mgmt-prod-507701.master.products` p
-    ON base.product_code = p.product_code
+  FULL OUTER JOIN indirect_cost_by_product i
+    ON COALESCE(s.target_month, d.target_month) = i.target_month
+   AND COALESCE(s.product_code, d.product_code) = i.product_code
 ),
 
 
 /* ============================================================
-   13. 製品採算を顧客単位へ集約
+   11. 製品別採算（前年同月）
    ============================================================ */
-profit_by_customer AS (
-
-  SELECT
-    target_month,
-    customer_code,
-
-    SUM(direct_material_cost) AS direct_material_cost,
-    SUM(indirect_cost) AS indirect_cost,
-    SUM(total_cost) AS total_cost,
-    SUM(actual_profit) AS actual_profit
-
-  FROM product_profit
-
-  GROUP BY
-    target_month,
-    customer_code
-),
-
-
-/* ============================================================
-   14. 製品採算（前年同月）
-   ============================================================ */
-profit_by_customer_prior_year AS (
+product_profit_prior_year AS (
 
   SELECT
     DATE_ADD(target_month, INTERVAL 1 YEAR) AS target_month,
-    customer_code,
+    product_code,
 
     actual_profit AS prior_year_profit
 
-  FROM profit_by_customer
+  FROM product_profit
 ),
 
 
 /* ============================================================
-   15. 年月×顧客の全キー＋主要指標
-   5つのCTEをCOALESCEキーで FULL OUTER JOIN し、
-   その場で列も取得する（二重取得・重複排除シャッフルなし）。
+   12. 年月×製品の全キー＋主要指標
+   product_profit（実績・原価）／production_by_product（生産実績）／
+   budget_cost_by_product（原価予算）をCOALESCEキーで
+   FULL OUTER JOIN し、その場で列も取得する。
    ============================================================ */
 base AS (
 
   SELECT
     COALESCE(
-      sa.target_month, sb.target_month, pr.target_month,
-      pc.target_month, bc.target_month
+      pp.target_month, prb.target_month, bcp.target_month
     ) AS target_month,
 
     COALESCE(
-      sa.customer_code, sb.customer_code, pr.customer_code,
-      pc.customer_code, bc.customer_code
-    ) AS customer_code,
+      pp.product_code, prb.product_code, bcp.product_code
+    ) AS product_code,
 
-    sa.sales_qty_kg,
-    sa.actual_sales_amount,
+    pp.sales_qty_kg,
+    pp.sales_amount AS actual_sales_amount,
 
-    sb.budget_sales_amount,
+    prb.material_qty_kg,
+    prb.production_qty_kg,
+    prb.defect_qty_kg,
+    prb.setup_hours,
+    prb.production_hours,
+    prb.standard_hours,
 
-    pr.material_qty_kg,
-    pr.production_qty_kg,
-    pr.defect_qty_kg,
-    pr.setup_hours,
-    pr.production_hours,
-    pr.standard_hours,
+    pp.direct_material_cost,
+    pp.indirect_cost,
+    pp.total_cost,
+    pp.actual_profit,
 
-    pc.direct_material_cost,
-    pc.indirect_cost,
-    pc.total_cost,
-    pc.actual_profit,
+    bcp.allocated_budget_cost AS budget_cost
 
-    bc.budget_cost
+  FROM product_profit pp
 
-  FROM sales_actual sa
+  FULL OUTER JOIN production_by_product prb
+    ON pp.target_month = prb.target_month
+   AND pp.product_code = prb.product_code
 
-  FULL OUTER JOIN sales_budget sb
-    ON sa.target_month = sb.target_month
-   AND sa.customer_code = sb.customer_code
-
-  FULL OUTER JOIN production_by_customer pr
-    ON COALESCE(sa.target_month, sb.target_month) = pr.target_month
-   AND COALESCE(sa.customer_code, sb.customer_code) = pr.customer_code
-
-  FULL OUTER JOIN profit_by_customer pc
-    ON COALESCE(sa.target_month, sb.target_month, pr.target_month)
-       = pc.target_month
-   AND COALESCE(sa.customer_code, sb.customer_code, pr.customer_code)
-       = pc.customer_code
-
-  FULL OUTER JOIN budget_cost_by_customer bc
-    ON COALESCE(
-         sa.target_month, sb.target_month, pr.target_month, pc.target_month
-       ) = bc.target_month
-   AND COALESCE(
-         sa.customer_code, sb.customer_code, pr.customer_code, pc.customer_code
-       ) = bc.customer_code
+  FULL OUTER JOIN budget_cost_by_product bcp
+    ON COALESCE(pp.target_month, prb.target_month) = bcp.target_month
+   AND COALESCE(pp.product_code, prb.product_code) = bcp.product_code
 )
 
 
 /* ============================================================
-   16. 最終結果
+   13. 最終結果（年月×製品）
    ============================================================ */
 SELECT
 
   base.target_month,
-  base.customer_code,
+  base.product_code,
+  mp.product_name,
+
+  -- 顧客・工場（部門）は製品マスタ経由（1製品=1顧客・1工場の前提）
+  mp.customer_code,
   c.customer_name,
+  mp.factory_code,
+  f.factory_name,
 
   -- ---------------- 売上：実績・予算・前年 ----------------
 
   COALESCE(base.sales_qty_kg, 0) AS sales_qty_kg,
   COALESCE(base.actual_sales_amount, 0) AS actual_sales_amount,
-  COALESCE(base.budget_sales_amount, 0) AS budget_sales_amount,
+
+  -- 売上予算は「年月×顧客」単位でしか記録がないため、
+  -- 同一顧客の全製品行に同じ値が複製される。
+  -- 製品別にSUMすると顧客の予算額が水増しされるので、
+  -- 顧客単位で集計する場合（＝この顧客の1行に集約する場合）のみ
+  -- 使用すること。Looker Studio側では既定の集計方法をSUM以外
+  -- （AVGやMAX等）にするか、顧客単位の表でのみ表示すること。
+  COALESCE(sb.budget_sales_amount, 0) AS budget_sales_amount,
 
   COALESCE(base.actual_sales_amount, 0)
-    - COALESCE(base.budget_sales_amount, 0)
+    - COALESCE(sb.budget_sales_amount, 0)
     AS sales_budget_variance_amount,
 
   SAFE_DIVIDE(
     COALESCE(base.actual_sales_amount, 0)
-      - COALESCE(base.budget_sales_amount, 0),
-    NULLIF(COALESCE(base.budget_sales_amount, 0), 0)
+      - COALESCE(sb.budget_sales_amount, 0),
+    NULLIF(COALESCE(sb.budget_sales_amount, 0), 0)
   ) AS sales_budget_variance_rate,
 
   COALESCE(spy.prior_year_sales_amount, 0) AS prior_year_sales_amount,
@@ -754,7 +667,7 @@ SELECT
     NULLIF(ABS(ppy.prior_year_profit), 0)
   ) AS profit_yoy_rate,
 
-  -- ---------------- 原価：予算対比 ----------------
+  -- ---------------- 原価：予算対比（製品単位に配賦済み・合計可） ----------------
 
   COALESCE(base.budget_cost, 0) AS budget_cost,
 
@@ -820,18 +733,18 @@ SELECT
     NULLIF(base.production_hours, 0)
   ) AS productivity_vs_standard_rate,
 
-  -- ---------------- 売上予算ステータス ----------------
+  -- ---------------- 売上予算ステータス（顧客単位。上記と同じ注意点） ----------------
 
   CASE
 
     WHEN
-      base.budget_sales_amount IS NULL
-      OR base.budget_sales_amount = 0
+      sb.budget_sales_amount IS NULL
+      OR sb.budget_sales_amount = 0
     THEN 'NO_BUDGET'
 
     WHEN
       base.actual_sales_amount
-      >= base.budget_sales_amount
+      >= sb.budget_sales_amount
     THEN 'ACHIEVED'
 
     ELSE 'BELOW_BUDGET'
@@ -841,20 +754,26 @@ SELECT
 
 FROM base
 
-LEFT JOIN sales_actual_prior_year spy
-  USING (
-    target_month,
-    customer_code
-  )
-
-LEFT JOIN profit_by_customer_prior_year ppy
-  USING (
-    target_month,
-    customer_code
-  )
+LEFT JOIN `cost-mgmt-prod-507701.master.products` mp
+  ON base.product_code = mp.product_code
 
 LEFT JOIN `cost-mgmt-prod-507701.master.customers` c
-  ON base.customer_code = c.customer_code;
+  ON mp.customer_code = c.customer_code
+
+LEFT JOIN `cost-mgmt-prod-507701.master.factories` f
+  ON mp.factory_code = f.factory_code
+
+LEFT JOIN sales_budget sb
+  ON base.target_month = sb.target_month
+ AND mp.customer_code = sb.customer_code
+
+LEFT JOIN sales_by_product_prior_year spy
+  ON base.target_month = spy.target_month
+ AND base.product_code = spy.product_code
+
+LEFT JOIN product_profit_prior_year ppy
+  ON base.target_month = ppy.target_month
+ AND base.product_code = ppy.product_code;
 
 
 -- ================================================================
