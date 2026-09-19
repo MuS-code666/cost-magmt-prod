@@ -39,6 +39,15 @@
 --        「顧客単位に集計する場合のみ使用可（SUMではなくAVG/MAX等で
 --        重複排除するか、顧客単位に絞り込んで参照する）」という制約が
 --        つく。Looker Studio側のフィールド説明で明示すること。
+--
+-- Looker Studio Phase 4-3 対応（2026-09-19）
+-- G. 原価（total_cost）の前年差異列が存在しなかったため追加。
+--      - 利益・売上には前年差異（profit_yoy_*, sales_yoy_*）があったが、
+--        原価自体の前年差異がなく、P1サマリーの「前年差異」スコアカード
+--        （原価の急変を見つける用途）を作れなかったため。
+--      - prior_year_total_cost, cost_yoy_amount, cost_yoy_rate を追加。
+--        計算方法は既存の profit_yoy_* と同じ仕組み
+--        （product_profit を1年ずらして自己結合）。
 -- ================================================================
 
 CREATE OR REPLACE VIEW `cost-mgmt-prod-507701.mart.v_variance` AS
@@ -539,7 +548,8 @@ product_profit_prior_year AS (
     DATE_ADD(target_month, INTERVAL 1 YEAR) AS target_month,
     product_code,
 
-    actual_profit AS prior_year_profit
+    actual_profit AS prior_year_profit,
+    total_cost AS prior_year_total_cost
 
   FROM product_profit
 ),
@@ -652,6 +662,18 @@ SELECT
     base.actual_profit,
     NULLIF(base.actual_sales_amount, 0)
   ) AS actual_profit_rate,
+
+  -- ---------------- 原価：前年対比 ----------------
+
+  COALESCE(ppy.prior_year_total_cost, 0) AS prior_year_total_cost,
+
+  COALESCE(base.total_cost, 0) - COALESCE(ppy.prior_year_total_cost, 0)
+    AS cost_yoy_amount,
+
+  SAFE_DIVIDE(
+    COALESCE(base.total_cost, 0) - COALESCE(ppy.prior_year_total_cost, 0),
+    NULLIF(ppy.prior_year_total_cost, 0)
+  ) AS cost_yoy_rate,
 
   -- ---------------- 利益：前年 ----------------
 
