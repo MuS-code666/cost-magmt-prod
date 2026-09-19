@@ -1,101 +1,125 @@
+-- ================================================================
+-- v_variance
+--
+-- パフォーマンスレビュー対応（2026-09-19）
+-- 元テーブルへの FROM/JOIN 回数を減らすための構造変更。
+-- ビジネスロジック・出力列は変更前と同一。
+--   A. history.production への FROM/JOIN を1箇所（production_base）に集約し、
+--      マシン／工場の稼働時間シェア4系統はウィンドウ関数で同時に算出する
+--      （6回スキャン → 1回）
+--   B. history.sales への FROM を1箇所（sales_base）に集約し、
+--      顧客粒度・製品粒度の2集計はそこから作る（2回 → 1回）
+--   C. history.costs への FROM を1箇所（costs_base）に集約し、
+--      DIRECT／PRODUCTION_HOURS の2集計はそこから作る（2回 → 1回）
+--   D. 「UNION DISTINCTでキー一覧を作ってから同じCTEに再LEFT JOIN」
+--      パターンを、COALESCEキーによる FULL OUTER JOIN 連結に置き換える
+--      （product_profit内の旧k、最終結果直前の旧keys）
+--   E. target_month のパーティション剪定は、ビュー構造では保証できない
+--      ため対応しない。運用でカバーする：
+--        - EXPLAIN / 実行計画で、呼び出し側の target_month 絞り込みが
+--          production_base / costs_base / sales_base のパーティション
+--          剪定まで届いているか定期的に検証する
+--        - Looker Studio側は target_month を必須フィルタとする
+--        - Claude MCP側はプロンプト・スキルのテンプレートで
+--          target_month 絞り込みを必須にする
+-- ================================================================
+
 CREATE OR REPLACE VIEW `cost-mgmt-prod-507701.mart.v_variance` AS
 
 WITH
 
 /* ============================================================
-   1. 売上実績
-   粒度：年月 × 顧客
+   0-A. 生産実績（行レベル）
+   history.production への FROM/JOIN はこのCTEのみに限定する。
+   lot_no を保持するため、直接材料費側の結合にもそのまま使える。
    ============================================================ */
-sales_actual AS (
-
-  SELECT
-    target_month,
-    customer_code,
-
-    SUM(quantity_kg) AS sales_qty_kg,
-    SUM(sales_amount) AS actual_sales_amount
-
-  FROM `cost-mgmt-prod-507701.history.sales`
-
-  GROUP BY
-    target_month,
-    customer_code
-),
-
-
-/* ============================================================
-   2. 売上予算
-   粒度：年月 × 顧客
-   ============================================================ */
-sales_budget AS (
-
-  SELECT
-    target_month,
-    customer_code,
-
-    SUM(budget_amount) AS budget_sales_amount
-
-  FROM `cost-mgmt-prod-507701.history.sales_budgets`
-
-  GROUP BY
-    target_month,
-    customer_code
-),
-
-
-/* ============================================================
-   3. 売上実績（前年同月）
-   target_monthを1年後ろへずらし、当年月のキーで直接結合できる形にする
-   ============================================================ */
-sales_actual_prior_year AS (
-
-  SELECT
-    DATE_ADD(target_month, INTERVAL 1 YEAR) AS target_month,
-    customer_code,
-
-    actual_sales_amount AS prior_year_sales_amount
-
-  FROM sales_actual
-),
-
-
-/* ============================================================
-   4. 生産実績
-   まず製品単位に集約。あわせて、標準生産能率（製品マスタ）から
-   「標準時間で生産した場合にかかったはずの時間」を算出する。
-   ============================================================ */
-production_by_product AS (
+production_base AS (
 
   SELECT
     pr.target_month,
+    pr.lot_no,
+    pr.factory_code,
+    pr.machine_code,
     pr.product_code,
 
-    SUM(pr.material_qty_kg) AS material_qty_kg,
-    SUM(pr.production_qty_kg) AS production_qty_kg,
-    SUM(pr.defect_qty_kg) AS defect_qty_kg,
+    pr.material_qty_kg,
+    pr.production_qty_kg,
+    pr.defect_qty_kg,
+    pr.setup_hours,
+    pr.production_hours,
 
-    SUM(pr.setup_hours) AS setup_hours,
-    SUM(pr.production_hours) AS production_hours,
-
-    SAFE_DIVIDE(
-      SUM(pr.production_qty_kg),
-      NULLIF(ANY_VALUE(m.standard_productivity_kg_h), 0)
-    ) AS standard_hours
+    m.standard_productivity_kg_h
 
   FROM `cost-mgmt-prod-507701.history.production` pr
 
   LEFT JOIN `cost-mgmt-prod-507701.master.products` m
     ON pr.product_code = m.product_code
-
-  GROUP BY
-    pr.target_month,
-    pr.product_code
 ),
 
 
 /* ============================================================
-   5. 生産実績を顧客単位へ変換
-   製品マスタを利用
+   0-B. マシン／工場の稼働時間シェアをウィンドウ関数でまとめて算出
+   production_base を1回スキャンし、4つの集計値を同時に付与する。
+   ============================================================ */
+production_with_totals AS (
+
+  SELECT
+    target_month,
+    factory_code,
+    machine_code,
+    product_code,
+    production_hours,
+
+    SUM(production_hours) OVER (
+      PARTITION BY target_month, factory_code, machine_code, product_code
+    ) AS product_machine_hours,
+
+    SUM(production_hours) OVER (
+      PARTITION BY target_month, factory_code, machine_code
+    ) AS machine_total_hours,
+
+    SUM(production_hours) OVER (
+      PARTITION BY target_month, factory_code, product_code
+    ) AS product_factory_hours,
+
+    SUM(production_hours) OVER (
+      PARTITION BY target_month, factory_code
+    ) AS factory_total_hours
+
+  FROM production_base
+),
+
+
+/* ============================================================
+   1. 生産実績（製品単位）
+   ============================================================ */
+production_by_product AS (
+
+  SELECT
+    target_month,
+    product_code,
+
+    SUM(material_qty_kg) AS material_qty_kg,
+    SUM(production_qty_kg) AS production_qty_kg,
+    SUM(defect_qty_kg) AS defect_qty_kg,
+    SUM(setup_hours) AS setup_hours,
+    SUM(production_hours) AS production_hours,
+
+    SAFE_DIVIDE(
+      SUM(production_qty_kg),
+      NULLIF(ANY_VALUE(standard_productivity_kg_h), 0)
+    ) AS standard_hours
+
+  FROM production_base
+
+  GROUP BY
+    target_month,
+    product_code
+),
+
+
+/* ============================================================
+   2. 生産実績を顧客単位へ変換
    ============================================================ */
 production_by_customer AS (
 
@@ -122,11 +146,83 @@ production_by_customer AS (
 
 
 /* ============================================================
-   6. 直接材料費
-   ロットNo.のみで生産実績と結合する。原価の計上月（posting_date）と
-   生産実施月（production_date）がずれるケース（例：月末納品・
-   翌月生産）でも取りこぼさないよう、対象年月は生産側
-   （production.target_month）を正とする。
+   3. マシン／工場の稼働時間シェア（製品単位・全体）
+   production_with_totals から重複行を落とすだけ。
+   ============================================================ */
+product_machine_hours AS (
+
+  SELECT DISTINCT
+    target_month,
+    factory_code,
+    machine_code,
+    product_code,
+    product_machine_hours AS product_hours
+
+  FROM production_with_totals
+),
+
+machine_total_hours AS (
+
+  SELECT DISTINCT
+    target_month,
+    factory_code,
+    machine_code,
+    machine_total_hours AS total_hours
+
+  FROM production_with_totals
+),
+
+product_factory_hours AS (
+
+  SELECT DISTINCT
+    target_month,
+    factory_code,
+    product_code,
+    product_factory_hours AS product_hours
+
+  FROM production_with_totals
+),
+
+factory_total_hours AS (
+
+  SELECT DISTINCT
+    target_month,
+    factory_code,
+    factory_total_hours AS total_hours
+
+  FROM production_with_totals
+),
+
+
+/* ============================================================
+   4-A. 原価実績（行レベル、allocation_methodを付与）
+   history.costs への FROM はこのCTEのみに限定する。
+   ============================================================ */
+costs_base AS (
+
+  SELECT
+    c.target_month AS cost_target_month,
+    c.cost_account_code,
+    c.factory_code,
+    c.machine_code,
+    c.lot_no,
+    c.amount,
+    ca.allocation_method
+
+  FROM `cost-mgmt-prod-507701.history.costs` c
+
+  INNER JOIN `cost-mgmt-prod-507701.master.cost_accounts` ca
+    ON c.cost_account_code = ca.cost_account_code
+
+  WHERE
+    ca.allocation_method IN ('DIRECT', 'PRODUCTION_HOURS')
+),
+
+
+/* ============================================================
+   4-B. 直接材料費
+   costs_base × production_base（lot_no結合）。
+   対象年月は production 側（生産実施月）を正とする。
    ============================================================ */
 direct_material_cost_by_product AS (
 
@@ -134,18 +230,15 @@ direct_material_cost_by_product AS (
     p.target_month,
     p.product_code,
 
-    SUM(c.amount) AS direct_material_cost
+    SUM(cb.amount) AS direct_material_cost
 
-  FROM `cost-mgmt-prod-507701.history.costs` c
+  FROM costs_base cb
 
-  INNER JOIN `cost-mgmt-prod-507701.master.cost_accounts` ca
-    ON c.cost_account_code = ca.cost_account_code
-
-  INNER JOIN `cost-mgmt-prod-507701.history.production` p
-    ON c.lot_no = p.lot_no
+  INNER JOIN production_base p
+    ON cb.lot_no = p.lot_no
 
   WHERE
-    ca.allocation_method = 'DIRECT'
+    cb.allocation_method = 'DIRECT'
 
   GROUP BY
     p.target_month,
@@ -154,120 +247,33 @@ direct_material_cost_by_product AS (
 
 
 /* ============================================================
-   7. 製品×マシンの生産時間
-   ============================================================ */
-product_machine_hours AS (
-
-  SELECT
-    target_month,
-    factory_code,
-    machine_code,
-    product_code,
-
-    SUM(production_hours) AS product_hours
-
-  FROM `cost-mgmt-prod-507701.history.production`
-
-  GROUP BY
-    target_month,
-    factory_code,
-    machine_code,
-    product_code
-),
-
-
-/* ============================================================
-   8. マシン全体の生産時間
-   ============================================================ */
-machine_total_hours AS (
-
-  SELECT
-    target_month,
-    factory_code,
-    machine_code,
-
-    SUM(production_hours) AS total_hours
-
-  FROM `cost-mgmt-prod-507701.history.production`
-
-  GROUP BY
-    target_month,
-    factory_code,
-    machine_code
-),
-
-
-/* ============================================================
-   9. 製品×工場の生産時間
-   ============================================================ */
-product_factory_hours AS (
-
-  SELECT
-    target_month,
-    factory_code,
-    product_code,
-
-    SUM(production_hours) AS product_hours
-
-  FROM `cost-mgmt-prod-507701.history.production`
-
-  GROUP BY
-    target_month,
-    factory_code,
-    product_code
-),
-
-
-/* ============================================================
-   10. 工場全体の生産時間
-   ============================================================ */
-factory_total_hours AS (
-
-  SELECT
-    target_month,
-    factory_code,
-
-    SUM(production_hours) AS total_hours
-
-  FROM `cost-mgmt-prod-507701.history.production`
-
-  GROUP BY
-    target_month,
-    factory_code
-),
-
-
-/* ============================================================
-   11. 間接費（実績）
+   4-C. 間接費（実績）
    ============================================================ */
 indirect_cost AS (
 
   SELECT
-    c.target_month,
-    c.factory_code,
-    c.machine_code,
-    c.cost_account_code,
+    cost_target_month AS target_month,
+    factory_code,
+    machine_code,
+    cost_account_code,
 
-    SUM(c.amount) AS indirect_cost
+    SUM(amount) AS indirect_cost
 
-  FROM `cost-mgmt-prod-507701.history.costs` c
-
-  INNER JOIN `cost-mgmt-prod-507701.master.cost_accounts` ca
-    ON c.cost_account_code = ca.cost_account_code
+  FROM costs_base
 
   WHERE
-    ca.allocation_method = 'PRODUCTION_HOURS'
+    allocation_method = 'PRODUCTION_HOURS'
 
   GROUP BY
-    c.target_month,
-    c.factory_code,
-    c.machine_code,
-    c.cost_account_code
+    cost_target_month,
+    factory_code,
+    machine_code,
+    cost_account_code
 ),
 
 
 /* ============================================================
-   12. マシン単位間接費（実績）を製品へ配賦
+   5. マシン単位間接費（実績）を製品へ配賦
    ============================================================ */
 machine_allocated_cost AS (
 
@@ -278,10 +284,7 @@ machine_allocated_cost AS (
     SUM(
       c.indirect_cost
       *
-      SAFE_DIVIDE(
-        p.product_hours,
-        t.total_hours
-      )
+      SAFE_DIVIDE(p.product_hours, t.total_hours)
     ) AS allocated_cost
 
   FROM indirect_cost c
@@ -306,7 +309,7 @@ machine_allocated_cost AS (
 
 
 /* ============================================================
-   13. 工場共通費（実績）を製品へ配賦
+   6. 工場共通費（実績）を製品へ配賦
    ============================================================ */
 factory_allocated_cost AS (
 
@@ -317,10 +320,7 @@ factory_allocated_cost AS (
     SUM(
       c.indirect_cost
       *
-      SAFE_DIVIDE(
-        p.product_hours,
-        t.total_hours
-      )
+      SAFE_DIVIDE(p.product_hours, t.total_hours)
     ) AS allocated_cost
 
   FROM indirect_cost c
@@ -343,7 +343,7 @@ factory_allocated_cost AS (
 
 
 /* ============================================================
-   14. 間接費（実績）を製品単位へ統合
+   7. 間接費（実績）を製品単位へ統合
    ============================================================ */
 indirect_cost_by_product AS (
 
@@ -354,13 +354,11 @@ indirect_cost_by_product AS (
 
   FROM (
 
-    SELECT *
-    FROM machine_allocated_cost
+    SELECT * FROM machine_allocated_cost
 
     UNION ALL
 
-    SELECT *
-    FROM factory_allocated_cost
+    SELECT * FROM factory_allocated_cost
   )
 
   GROUP BY
@@ -370,7 +368,7 @@ indirect_cost_by_product AS (
 
 
 /* ============================================================
-   15. 原価予算（マシン単位）
+   8. 原価予算（マシン単位）
    原価予算は費用科目を問わず、必ず工場×マシン単位で作成されている
    （原材料費であっても「生産構成で配分」済みのため、実績のような
    lot_no・DIRECT/PRODUCTION_HOURSの区別は不要）。
@@ -394,7 +392,7 @@ cost_budget_by_machine AS (
 
 
 /* ============================================================
-   16. 原価予算を製品へ配賦
+   9. 原価予算を製品へ配賦
    実績の間接費配賦と同じ基準（そのマシンの実績生産時間シェア）で
    配分する。そのため、対象月の実績生産がまだない場合（将来の
    予算月など）は配賦できず、この月の原価予算は顧客別には
@@ -409,10 +407,7 @@ budget_cost_by_product AS (
     SUM(
       b.budget_cost
       *
-      SAFE_DIVIDE(
-        p.product_hours,
-        t.total_hours
-      )
+      SAFE_DIVIDE(p.product_hours, t.total_hours)
     ) AS allocated_budget_cost
 
   FROM cost_budget_by_machine b
@@ -434,7 +429,7 @@ budget_cost_by_product AS (
 
 
 /* ============================================================
-   17. 原価予算を顧客単位へ集約
+   10. 原価予算を顧客単位へ集約
    ============================================================ */
 budget_cost_by_customer AS (
 
@@ -456,8 +451,37 @@ budget_cost_by_customer AS (
 
 
 /* ============================================================
-   18. 売上を製品単位へ集約
+   11-A. 売上実績（行レベル）
+   history.sales への FROM はこのCTEのみに限定する。
    ============================================================ */
+sales_base AS (
+
+  SELECT
+    target_month,
+    customer_code,
+    product_code,
+    quantity_kg,
+    sales_amount
+
+  FROM `cost-mgmt-prod-507701.history.sales`
+),
+
+sales_actual AS (
+
+  SELECT
+    target_month,
+    customer_code,
+
+    SUM(quantity_kg) AS sales_qty_kg,
+    SUM(sales_amount) AS actual_sales_amount
+
+  FROM sales_base
+
+  GROUP BY
+    target_month,
+    customer_code
+),
+
 sales_by_product AS (
 
   SELECT
@@ -467,7 +491,7 @@ sales_by_product AS (
     SUM(quantity_kg) AS sales_qty_kg,
     SUM(sales_amount) AS sales_amount
 
-  FROM `cost-mgmt-prod-507701.history.sales`
+  FROM sales_base
 
   GROUP BY
     target_month,
@@ -476,82 +500,99 @@ sales_by_product AS (
 
 
 /* ============================================================
-   19. 製品別採算
+   11-B. 売上予算
    ============================================================ */
-product_profit AS (
+sales_budget AS (
 
   SELECT
-    k.target_month,
-    k.product_code,
+    target_month,
+    customer_code,
 
-    p.customer_code,
+    SUM(budget_amount) AS budget_sales_amount
 
-    COALESCE(s.sales_qty_kg, 0)
-      AS sales_qty_kg,
+  FROM `cost-mgmt-prod-507701.history.sales_budgets`
 
-    COALESCE(s.sales_amount, 0)
-      AS sales_amount,
-
-    COALESCE(d.direct_material_cost, 0)
-      AS direct_material_cost,
-
-    COALESCE(i.indirect_cost, 0)
-      AS indirect_cost,
-
-    COALESCE(d.direct_material_cost, 0)
-      +
-    COALESCE(i.indirect_cost, 0)
-      AS total_cost,
-
-    COALESCE(s.sales_amount, 0)
-      -
-    COALESCE(d.direct_material_cost, 0)
-      -
-    COALESCE(i.indirect_cost, 0)
-      AS actual_profit
-
-  FROM (
-
-    SELECT target_month, product_code
-    FROM sales_by_product
-
-    UNION DISTINCT
-
-    SELECT target_month, product_code
-    FROM direct_material_cost_by_product
-
-    UNION DISTINCT
-
-    SELECT target_month, product_code
-    FROM indirect_cost_by_product
-
-  ) k
-
-  LEFT JOIN sales_by_product s
-    USING (
-      target_month,
-      product_code
-    )
-
-  LEFT JOIN direct_material_cost_by_product d
-    USING (
-      target_month,
-      product_code
-    )
-
-  LEFT JOIN indirect_cost_by_product i
-    USING (
-      target_month,
-      product_code
-    )
-
-  LEFT JOIN `cost-mgmt-prod-507701.master.products` p
-    ON k.product_code = p.product_code
+  GROUP BY
+    target_month,
+    customer_code
 ),
 
 
 /* ============================================================
-   20. 製品採算を顧客単位へ集約
+   11-C. 売上実績（前年同月）
+   target_monthを1年後ろへずらし、当年月のキーで直接結合できる形にする
+   ============================================================ */
+sales_actual_prior_year AS (
+
+  SELECT
+    DATE_ADD(target_month, INTERVAL 1 YEAR) AS target_month,
+    customer_code,
+
+    actual_sales_amount AS prior_year_sales_amount
+
+  FROM sales_actual
+),
+
+
+/* ============================================================
+   12. 製品別採算
+   3つのCTEをCOALESCEキーで FULL OUTER JOIN し、
+   両者のキー全体集合を1回のシャッフルで得る。
+   ============================================================ */
+product_profit AS (
+
+  SELECT
+    base.target_month,
+    base.product_code,
+
+    p.customer_code,
+
+    COALESCE(base.sales_qty_kg, 0) AS sales_qty_kg,
+    COALESCE(base.sales_amount, 0) AS sales_amount,
+    COALESCE(base.direct_material_cost, 0) AS direct_material_cost,
+    COALESCE(base.indirect_cost, 0) AS indirect_cost,
+
+    COALESCE(base.direct_material_cost, 0)
+      + COALESCE(base.indirect_cost, 0)
+      AS total_cost,
+
+    COALESCE(base.sales_amount, 0)
+      - COALESCE(base.direct_material_cost, 0)
+      - COALESCE(base.indirect_cost, 0)
+      AS actual_profit
+
+  FROM (
+
+    SELECT
+      COALESCE(s.target_month, d.target_month, i.target_month)
+        AS target_month,
+      COALESCE(s.product_code, d.product_code, i.product_code)
+        AS product_code,
+
+      s.sales_qty_kg,
+      s.sales_amount,
+      d.direct_material_cost,
+      i.indirect_cost
+
+    FROM sales_by_product s
+
+    FULL OUTER JOIN direct_material_cost_by_product d
+      ON s.target_month = d.target_month
+     AND s.product_code = d.product_code
+
+    FULL OUTER JOIN indirect_cost_by_product i
+      ON COALESCE(s.target_month, d.target_month) = i.target_month
+     AND COALESCE(s.product_code, d.product_code) = i.product_code
+
+  ) base
+
+  LEFT JOIN `cost-mgmt-prod-507701.master.products` p
+    ON base.product_code = p.product_code
+),
+
+
+/* ============================================================
+   13. 製品採算を顧客単位へ集約
    ============================================================ */
 profit_by_customer AS (
 
@@ -559,17 +600,10 @@ profit_by_customer AS (
     target_month,
     customer_code,
 
-    SUM(direct_material_cost)
-      AS direct_material_cost,
-
-    SUM(indirect_cost)
-      AS indirect_cost,
-
-    SUM(total_cost)
-      AS total_cost,
-
-    SUM(actual_profit)
-      AS actual_profit
+    SUM(direct_material_cost) AS direct_material_cost,
+    SUM(indirect_cost) AS indirect_cost,
+    SUM(total_cost) AS total_cost,
+    SUM(actual_profit) AS actual_profit
 
   FROM product_profit
 
@@ -580,7 +614,7 @@ profit_by_customer AS (
 
 
 /* ============================================================
-   21. 製品採算（前年同月）
+   14. 製品採算（前年同月）
    ============================================================ */
 profit_by_customer_prior_year AS (
 
@@ -595,200 +629,153 @@ profit_by_customer_prior_year AS (
 
 
 /* ============================================================
-   22. 年月×顧客の全キー
+   15. 年月×顧客の全キー＋主要指標
+   5つのCTEをCOALESCEキーで FULL OUTER JOIN し、
+   その場で列も取得する（二重取得・重複排除シャッフルなし）。
    ============================================================ */
-keys AS (
+base AS (
 
   SELECT
-    target_month,
-    customer_code
-  FROM sales_actual
+    COALESCE(
+      sa.target_month, sb.target_month, pr.target_month,
+      pc.target_month, bc.target_month
+    ) AS target_month,
 
-  UNION DISTINCT
+    COALESCE(
+      sa.customer_code, sb.customer_code, pr.customer_code,
+      pc.customer_code, bc.customer_code
+    ) AS customer_code,
 
-  SELECT
-    target_month,
-    customer_code
-  FROM sales_budget
+    sa.sales_qty_kg,
+    sa.actual_sales_amount,
 
-  UNION DISTINCT
+    sb.budget_sales_amount,
 
-  SELECT
-    target_month,
-    customer_code
-  FROM production_by_customer
+    pr.material_qty_kg,
+    pr.production_qty_kg,
+    pr.defect_qty_kg,
+    pr.setup_hours,
+    pr.production_hours,
+    pr.standard_hours,
 
-  UNION DISTINCT
+    pc.direct_material_cost,
+    pc.indirect_cost,
+    pc.total_cost,
+    pc.actual_profit,
 
-  SELECT
-    target_month,
-    customer_code
-  FROM profit_by_customer
+    bc.budget_cost
 
-  UNION DISTINCT
+  FROM sales_actual sa
 
-  SELECT
-    target_month,
-    customer_code
-  FROM budget_cost_by_customer
+  FULL OUTER JOIN sales_budget sb
+    ON sa.target_month = sb.target_month
+   AND sa.customer_code = sb.customer_code
+
+  FULL OUTER JOIN production_by_customer pr
+    ON COALESCE(sa.target_month, sb.target_month) = pr.target_month
+   AND COALESCE(sa.customer_code, sb.customer_code) = pr.customer_code
+
+  FULL OUTER JOIN profit_by_customer pc
+    ON COALESCE(sa.target_month, sb.target_month, pr.target_month)
+       = pc.target_month
+   AND COALESCE(sa.customer_code, sb.customer_code, pr.customer_code)
+       = pc.customer_code
+
+  FULL OUTER JOIN budget_cost_by_customer bc
+    ON COALESCE(
+         sa.target_month, sb.target_month, pr.target_month, pc.target_month
+       ) = bc.target_month
+   AND COALESCE(
+         sa.customer_code, sb.customer_code, pr.customer_code, pc.customer_code
+       ) = bc.customer_code
 )
 
 
 /* ============================================================
-   23. 最終結果
+   16. 最終結果
    ============================================================ */
 SELECT
 
-  k.target_month,
-
-  k.customer_code,
-
+  base.target_month,
+  base.customer_code,
   c.customer_name,
 
   -- ---------------- 売上：実績・予算・前年 ----------------
 
-  COALESCE(
-    sa.sales_qty_kg,
-    0
-  ) AS sales_qty_kg,
+  COALESCE(base.sales_qty_kg, 0) AS sales_qty_kg,
+  COALESCE(base.actual_sales_amount, 0) AS actual_sales_amount,
+  COALESCE(base.budget_sales_amount, 0) AS budget_sales_amount,
 
-  COALESCE(
-    sa.actual_sales_amount,
-    0
-  ) AS actual_sales_amount,
-
-  COALESCE(
-    sb.budget_sales_amount,
-    0
-  ) AS budget_sales_amount,
-
-  COALESCE(
-    sa.actual_sales_amount,
-    0
-  )
-  -
-  COALESCE(
-    sb.budget_sales_amount,
-    0
-  ) AS sales_budget_variance_amount,
+  COALESCE(base.actual_sales_amount, 0)
+    - COALESCE(base.budget_sales_amount, 0)
+    AS sales_budget_variance_amount,
 
   SAFE_DIVIDE(
-
-    COALESCE(
-      sa.actual_sales_amount,
-      0
-    )
-    -
-    COALESCE(
-      sb.budget_sales_amount,
-      0
-    ),
-
-    NULLIF(
-      COALESCE(
-        sb.budget_sales_amount,
-        0
-      ),
-      0
-    )
-
+    COALESCE(base.actual_sales_amount, 0)
+      - COALESCE(base.budget_sales_amount, 0),
+    NULLIF(COALESCE(base.budget_sales_amount, 0), 0)
   ) AS sales_budget_variance_rate,
 
-  COALESCE(
-    spy.prior_year_sales_amount,
-    0
-  ) AS prior_year_sales_amount,
+  COALESCE(spy.prior_year_sales_amount, 0) AS prior_year_sales_amount,
 
-  COALESCE(sa.actual_sales_amount, 0)
-  -
-  COALESCE(spy.prior_year_sales_amount, 0)
+  COALESCE(base.actual_sales_amount, 0)
+    - COALESCE(spy.prior_year_sales_amount, 0)
     AS sales_yoy_amount,
 
   SAFE_DIVIDE(
-    COALESCE(sa.actual_sales_amount, 0)
-    -
-    COALESCE(spy.prior_year_sales_amount, 0),
+    COALESCE(base.actual_sales_amount, 0)
+      - COALESCE(spy.prior_year_sales_amount, 0),
     NULLIF(spy.prior_year_sales_amount, 0)
   ) AS sales_yoy_rate,
 
   -- ---------------- 原価・利益：実績 ----------------
 
-  COALESCE(
-    pc.direct_material_cost,
-    0
-  ) AS direct_material_cost,
-
-  COALESCE(
-    pc.indirect_cost,
-    0
-  ) AS indirect_cost,
-
-  COALESCE(
-    pc.total_cost,
-    0
-  ) AS total_cost,
-
-  COALESCE(
-    pc.actual_profit,
-    0
-  ) AS actual_profit,
+  COALESCE(base.direct_material_cost, 0) AS direct_material_cost,
+  COALESCE(base.indirect_cost, 0) AS indirect_cost,
+  COALESCE(base.total_cost, 0) AS total_cost,
+  COALESCE(base.actual_profit, 0) AS actual_profit,
 
   SAFE_DIVIDE(
-    pc.actual_profit,
-    NULLIF(
-      sa.actual_sales_amount,
-      0
-    )
+    base.actual_profit,
+    NULLIF(base.actual_sales_amount, 0)
   ) AS actual_profit_rate,
 
   -- ---------------- 利益：前年 ----------------
 
-  COALESCE(
-    ppy.prior_year_profit,
-    0
-  ) AS prior_year_profit,
+  COALESCE(ppy.prior_year_profit, 0) AS prior_year_profit,
 
-  COALESCE(pc.actual_profit, 0)
-  -
-  COALESCE(ppy.prior_year_profit, 0)
+  COALESCE(base.actual_profit, 0)
+    - COALESCE(ppy.prior_year_profit, 0)
     AS profit_yoy_amount,
 
   SAFE_DIVIDE(
-    COALESCE(pc.actual_profit, 0)
-    -
-    COALESCE(ppy.prior_year_profit, 0),
+    COALESCE(base.actual_profit, 0)
+      - COALESCE(ppy.prior_year_profit, 0),
     NULLIF(ABS(ppy.prior_year_profit), 0)
   ) AS profit_yoy_rate,
 
   -- ---------------- 原価：予算対比 ----------------
 
-  COALESCE(
-    bc.budget_cost,
-    0
-  ) AS budget_cost,
+  COALESCE(base.budget_cost, 0) AS budget_cost,
 
-  COALESCE(pc.total_cost, 0)
-  -
-  COALESCE(bc.budget_cost, 0)
+  COALESCE(base.total_cost, 0) - COALESCE(base.budget_cost, 0)
     AS cost_budget_variance_amount,
 
   SAFE_DIVIDE(
-    COALESCE(pc.total_cost, 0)
-    -
-    COALESCE(bc.budget_cost, 0),
-    NULLIF(bc.budget_cost, 0)
+    COALESCE(base.total_cost, 0) - COALESCE(base.budget_cost, 0),
+    NULLIF(base.budget_cost, 0)
   ) AS cost_budget_variance_rate,
 
   CASE
 
     WHEN
-      bc.budget_cost IS NULL
-      OR bc.budget_cost = 0
+      base.budget_cost IS NULL
+      OR base.budget_cost = 0
     THEN 'NO_BUDGET'
 
     WHEN
-      COALESCE(pc.total_cost, 0)
-      <= bc.budget_cost
+      COALESCE(base.total_cost, 0)
+      <= base.budget_cost
     THEN 'WITHIN_BUDGET'
 
     ELSE 'OVER_BUDGET'
@@ -797,74 +784,40 @@ SELECT
 
   -- ---------------- 生産実績 ----------------
 
-  COALESCE(
-    pr.material_qty_kg,
-    0
-  ) AS material_qty_kg,
-
-  COALESCE(
-    pr.production_qty_kg,
-    0
-  ) AS production_qty_kg,
-
-  COALESCE(
-    pr.defect_qty_kg,
-    0
-  ) AS defect_qty_kg,
-
-  COALESCE(
-    pr.setup_hours,
-    0
-  ) AS setup_hours,
-
-  COALESCE(
-    pr.production_hours,
-    0
-  ) AS production_hours,
+  COALESCE(base.material_qty_kg, 0) AS material_qty_kg,
+  COALESCE(base.production_qty_kg, 0) AS production_qty_kg,
+  COALESCE(base.defect_qty_kg, 0) AS defect_qty_kg,
+  COALESCE(base.setup_hours, 0) AS setup_hours,
+  COALESCE(base.production_hours, 0) AS production_hours,
 
   SAFE_DIVIDE(
-    pr.defect_qty_kg,
-    NULLIF(
-      pr.material_qty_kg,
-      0
-    )
+    base.defect_qty_kg,
+    NULLIF(base.material_qty_kg, 0)
   ) AS defect_rate,
 
   SAFE_DIVIDE(
-    pr.production_qty_kg,
-    NULLIF(
-      pr.production_hours,
-      0
-    )
+    base.production_qty_kg,
+    NULLIF(base.production_hours, 0)
   ) AS actual_productivity_kg_h,
 
   SAFE_DIVIDE(
-    pc.total_cost,
-    NULLIF(
-      pr.production_qty_kg,
-      0
-    )
+    base.total_cost,
+    NULLIF(base.production_qty_kg, 0)
   ) AS cost_per_production_kg,
 
   -- ---------------- 標準生産能率との差異 ----------------
 
-  COALESCE(
-    pr.standard_hours,
-    0
-  ) AS standard_production_hours,
+  COALESCE(base.standard_hours, 0) AS standard_production_hours,
 
-  pr.standard_hours
+  base.standard_hours
   -
-  pr.production_hours
+  base.production_hours
     AS production_hours_variance,
 
   -- 1.0=標準どおり。1より大きい=標準より高効率（実績時間が標準より少ない）
   SAFE_DIVIDE(
-    pr.standard_hours,
-    NULLIF(
-      pr.production_hours,
-      0
-    )
+    base.standard_hours,
+    NULLIF(base.production_hours, 0)
   ) AS productivity_vs_standard_rate,
 
   -- ---------------- 売上予算ステータス ----------------
@@ -872,13 +825,13 @@ SELECT
   CASE
 
     WHEN
-      sb.budget_sales_amount IS NULL
-      OR sb.budget_sales_amount = 0
+      base.budget_sales_amount IS NULL
+      OR base.budget_sales_amount = 0
     THEN 'NO_BUDGET'
 
     WHEN
-      sa.actual_sales_amount
-      >= sb.budget_sales_amount
+      base.actual_sales_amount
+      >= base.budget_sales_amount
     THEN 'ACHIEVED'
 
     ELSE 'BELOW_BUDGET'
@@ -886,33 +839,9 @@ SELECT
   END AS sales_budget_status
 
 
-FROM keys k
-
-LEFT JOIN sales_actual sa
-  USING (
-    target_month,
-    customer_code
-  )
-
-LEFT JOIN sales_budget sb
-  USING (
-    target_month,
-    customer_code
-  )
+FROM base
 
 LEFT JOIN sales_actual_prior_year spy
-  USING (
-    target_month,
-    customer_code
-  )
-
-LEFT JOIN production_by_customer pr
-  USING (
-    target_month,
-    customer_code
-  )
-
-LEFT JOIN profit_by_customer pc
   USING (
     target_month,
     customer_code
@@ -924,14 +853,8 @@ LEFT JOIN profit_by_customer_prior_year ppy
     customer_code
   )
 
-LEFT JOIN budget_cost_by_customer bc
-  USING (
-    target_month,
-    customer_code
-  )
-
 LEFT JOIN `cost-mgmt-prod-507701.master.customers` c
-  ON k.customer_code = c.customer_code;
+  ON base.customer_code = c.customer_code;
 
 
 -- ================================================================
