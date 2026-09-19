@@ -19,25 +19,30 @@ CREATE TABLE `cost-mgmt-prod-507701.master.customers` (
 CREATE TABLE `cost-mgmt-prod-507701.master.materials` (
   material_code STRING NOT NULL,
   material_name STRING,
-  unit_price NUMERIC
+  unit_price NUMERIC,
+  primary_vendor_code STRING
 );
 
 CREATE TABLE `cost-mgmt-prod-507701.master.factories` (
   factory_code STRING NOT NULL,
-  factory_name STRING
+  factory_name STRING,
+  annual_factory_rent NUMERIC
 );
 
 
 CREATE TABLE `cost-mgmt-prod-507701.master.machines` (
   machine_code STRING NOT NULL,
   machine_name STRING,
-  factory_code STRING
+  factory_code STRING,
+  rated_power_kw NUMERIC,
+  annual_depreciation NUMERIC
 );
 
 CREATE TABLE `cost-mgmt-prod-507701.master.workers` (
   worker_code STRING NOT NULL,
   worker_name STRING,
-  factory_code STRING
+  factory_code STRING,
+  machine_code STRING
 );
 
 CREATE TABLE `cost-mgmt-prod-507701.master.sales_staff` (
@@ -47,7 +52,8 @@ CREATE TABLE `cost-mgmt-prod-507701.master.sales_staff` (
 
 CREATE TABLE `cost-mgmt-prod-507701.master.vendors` (
   vendor_code STRING NOT NULL,
-  vendor_name STRING
+  vendor_name STRING,
+  vendor_type STRING
 );
 
 CREATE TABLE `cost-mgmt-prod-507701.master.cost_accounts` (

@@ -81,7 +81,8 @@ function loadNewHistoryMonths() {
       if (existingMonths.has(monthKey)) {
         console.log(
           '[HISTORY] ' + item.spec.tableId + ' ' + monthKey +
-          ' : BigQuery登録済みのためスキップ'
+          ' : BigQuery登録済みのためスキップ' +
+          '（対象月のデータを訂正した場合はreloadSpecifiedHistoryMonth()を実行してください）'
         );
         return;
       }
@@ -106,7 +107,13 @@ function loadNewHistoryMonths() {
 }
 
 
-/** 設定シートで指定した1か月だけヒストリー6表を洗い替え */
+/**
+ * 設定シートで指定した1か月だけヒストリー6表を洗い替え
+ *
+ * 対象月のデータが存在しない表はエラーにせずスキップする
+ * （1ソースだけを訂正・再アップロードした場合でも実行できるようにするため）。
+ * 6表すべてにデータがない場合のみエラーとする。
+ */
 function reloadSpecifiedHistoryMonth() {
   const ctx = getContext_();
   const specs = getHistorySpecs_();
@@ -115,22 +122,34 @@ function reloadSpecifiedHistoryMonth() {
   const month = ctx.cfg.reloadMonth;
   const monthKey = formatMonthKey_(year, month);
 
-  // 6表すべてに対象月データがあることを先に確認する。
-  // 途中まで更新される状態を避けるため、書込み前に全件検証する。
-  const prepared = specs.map(function(spec) {
+  // 書込み前に全表を読み切ってから判定する（途中まで更新される状態を避けるため）。
+  const targets = [];
+  const skippedSheetNames = [];
+
+  specs.forEach(function(spec) {
     const item = prepareHistoryTable_(ctx.ss, spec);
 
-    if (!item.rowsByMonth[monthKey] || item.rowsByMonth[monthKey].length === 0) {
-      throw new Error(
-        '[RELOAD] ' + spec.sheetName +
-        ' に ' + monthKey + ' のデータがありません。'
-      );
+    if (item.rowsByMonth[monthKey] && item.rowsByMonth[monthKey].length > 0) {
+      targets.push(item);
+    } else {
+      skippedSheetNames.push(spec.sheetName);
     }
-
-    return item;
   });
 
-  prepared.forEach(function(item) {
+  if (targets.length === 0) {
+    throw new Error(
+      '[RELOAD] ' + monthKey + ' のデータが、ヒストリー6表のいずれにもありません。'
+    );
+  }
+
+  if (skippedSheetNames.length > 0) {
+    console.log(
+      '[RELOAD] ' + monthKey + ' のデータがないためスキップしたシート: ' +
+      skippedSheetNames.join(', ')
+    );
+  }
+
+  targets.forEach(function(item) {
     const rows = [item.spec.columns].concat(item.rowsByMonth[monthKey]);
 
     loadCsvToMonthlyPartition_(
@@ -146,7 +165,13 @@ function reloadSpecifiedHistoryMonth() {
     );
   });
 
-  console.log('指定月 ' + monthKey + ' の再ロードが正常終了しました。');
+  console.log(
+    '指定月 ' + monthKey + ' の再ロードが正常終了しました' +
+    (skippedSheetNames.length > 0
+      ? '（' + skippedSheetNames.length + '表はデータなしのためスキップ）'
+      : '') +
+    '。'
+  );
 }
 
 
@@ -557,10 +582,11 @@ function requiredSetting_(map, key) {
 function prepareMasterTable_(ss, spec) {
   const sheetData = readSheet_(ss, spec.sheetName);
   const output = [spec.columns];
+  const blankCheckIgnoreIndexes = getBlankCheckIgnoreIndexes_(sheetData.headers);
 
   for (let i = 1; i < sheetData.values.length; i++) {
     const row = sheetData.values[i];
-    if (isBlankRow_(row)) continue;
+    if (isBlankRow_(row, blankCheckIgnoreIndexes)) continue;
     output.push(spec.map(row, sheetData.headers));
   }
 
@@ -577,6 +603,7 @@ function prepareHistoryTable_(ss, spec) {
   const loadedAt = new Date();
   const rowsByMonth = {};
   const targetMonthIndex = spec.columns.indexOf('target_month');
+  const blankCheckIgnoreIndexes = getBlankCheckIgnoreIndexes_(sheetData.headers);
 
   if (targetMonthIndex === -1) {
     throw new Error('内部定義エラー：target_month がありません: ' + spec.tableId);
@@ -584,7 +611,7 @@ function prepareHistoryTable_(ss, spec) {
 
   for (let i = 1; i < sheetData.values.length; i++) {
     const row = sheetData.values[i];
-    if (isBlankRow_(row)) continue;
+    if (isBlankRow_(row, blankCheckIgnoreIndexes)) continue;
 
     const mapped = spec.map(row, sheetData.headers, loadedAt);
     const monthKey = monthKeyFromDateString_(mapped[targetMonthIndex]);
@@ -598,6 +625,19 @@ function prepareHistoryTable_(ss, spec) {
   }
 
   return { spec: spec, rowsByMonth: rowsByMonth };
+}
+
+
+/**
+ * 空行判定から除外すべき列（中間S生成側の管理列など）のインデックスを返す。
+ *
+ * stg_*シートには中間S生成_コード.gsが追加した管理列「_対象期間」が
+ * 常に値を持つため、これを含めて空行判定すると、本来空行として
+ * スキップすべき行を誤って処理対象にしてしまう。
+ */
+function getBlankCheckIgnoreIndexes_(headers) {
+  const index = headers.indexOf('_対象期間');
+  return index === -1 ? [] : [index];
 }
 
 
@@ -806,8 +846,10 @@ function value_(row, headers, headerName) {
 }
 
 
-function isBlankRow_(row) {
-  return row.every(function(v) {
+function isBlankRow_(row, ignoreIndexes) {
+  const ignored = ignoreIndexes || [];
+  return row.every(function(v, i) {
+    if (ignored.indexOf(i) !== -1) return true;
     return v === '' || v === null || v === undefined;
   });
 }
