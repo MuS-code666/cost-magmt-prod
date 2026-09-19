@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+  <base target="_top">
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 40px 20px;
+      background: #f5f6f8;
+
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        "Yu Gothic",
+        "Meiryo",
+        sans-serif;
+
+      color: #333;
+    }
+
+    .container {
+      max-width: 650px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 36px;
+      border-radius: 10px;
+
+      box-shadow:
+        0 2px 10px
+        rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+      margin-top: 0;
+      margin-bottom: 30px;
+      font-size: 24px;
+      font-weight: 600;
+
+      border-bottom:
+        1px solid #dddddd;
+
+      padding-bottom: 18px;
+    }
+
+    .message {
+      display: none;
+      margin-bottom: 24px;
+      padding: 14px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .message.success {
+      display: block;
+      background: #e8f5e9;
+      border: 1px solid #a5d6a7;
+      color: #1b5e20;
+    }
+
+    .message.error {
+      display: block;
+      background: #ffebee;
+      border: 1px solid #ef9a9a;
+      color: #b71c1c;
+    }
+
+    .message.processing {
+      display: block;
+      background: #e3f2fd;
+      border: 1px solid #90caf9;
+      color: #0d47a1;
+    }
+
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .required {
+      margin-left: 4px;
+      color: #d32f2f;
+      font-size: 12px;
+    }
+
+    input,
+    select {
+      width: 100%;
+      padding: 11px 12px;
+
+      border:
+        1px solid #cccccc;
+
+      border-radius: 5px;
+      background: #ffffff;
+      font-size: 15px;
+    }
+
+    input:focus,
+    select:focus {
+      outline: none;
+      border-color: #666666;
+    }
+
+    input[type="file"] {
+      padding: 8px;
+      background: #fafafa;
+    }
+
+    .description {
+      margin-top: 6px;
+      color: #777777;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    /*
+     * 年月プルダウン
+     */
+    .month-selector {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .month-selector select {
+      flex: 1;
+    }
+
+    .month-label {
+      white-space: nowrap;
+      font-size: 15px;
+    }
+
+    button {
+      width: 100%;
+      padding: 13px;
+
+      border: none;
+      border-radius: 5px;
+
+      background: #333333;
+      color: #ffffff;
+
+      font-size: 16px;
+      font-weight: 600;
+
+      cursor: pointer;
+
+      transition:
+        opacity 0.2s;
+    }
+
+    button:hover {
+      opacity: 0.85;
+    }
+
+    button:disabled {
+      background: #999999;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+  </style>
+
+</head>
+
+
+<body>
+
+  <div class="container">
+
+    <h1>
+      原価管理システム-ファイル登録
+    </h1>
+
+
+    <!-- メッセージ -->
+    <div
+      id="message"
+      class="message"
+    ></div>
+
+
+    <form
+      id="uploadForm"
+      onsubmit="handleSubmit(this); return false;"
+    >
+
+
+      <!-- ファイル -->
+      <div class="form-group">
+
+        <label for="uploadFile">
+
+          ファイル選択
+
+          <span class="required">
+            必須
+          </span>
+
+        </label>
+
+
+        <input
+          type="file"
+          id="uploadFile"
+          name="uploadFile"
+          accept=".xlsx,.xls"
+          required
+        >
+
+
+        <div class="description">
+          Excelファイル（.xlsx / .xls）を選択してください。
+        </div>
+
+      </div>
+
+
+      <!-- ソース種別 -->
+      <div class="form-group">
+
+        <label for="sourceType">
+
+          ソース種別
+
+          <span class="required">
+            必須
+          </span>
+
+        </label>
+
+
+        <select
+          id="sourceType"
+          name="sourceType"
+          required
+        >
+
+          <option value="">
+            選択してください
+          </option>
+
+          <option value="売上">
+            売上
+          </option>
+
+          <option value="原価">
+            原価
+          </option>
+
+          <option value="生産">
+            生産
+          </option>
+
+          <option value="月報">
+            月報
+          </option>
+
+        </select>
+
+      </div>
+
+
+      <!-- 対象年月 -->
+      <div class="form-group">
+
+        <label>
+
+          対象年月
+
+          <span class="required">
+            必須
+          </span>
+
+        </label>
+
+
+        <div class="month-selector">
+
+          <!-- 年 -->
+          <select
+            id="targetYear"
+            required
+          >
+          </select>
+
+          <span class="month-label">
+            年
+          </span>
+
+
+          <!-- 月 -->
+          <select
+            id="targetMonthSelect"
+            required
+          >
+
+            <option value="">
+              選択
+            </option>
+
+            <option value="01">1</option>
+            <option value="02">2</option>
+            <option value="03">3</option>
+            <option value="04">4</option>
+            <option value="05">5</option>
+            <option value="06">6</option>
+            <option value="07">7</option>
+            <option value="08">8</option>
+            <option value="09">9</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+
+          </select>
+
+          <span class="month-label">
+            月
+          </span>
+
+        </div>
+
+
+        <!--
+          Code.gsには従来と同じ
+          「2026年-09月」
+          の形式で送信する
+        -->
+        <input
+          type="hidden"
+          id="targetMonth"
+          name="targetMonth"
+        >
+
+      </div>
+
+
+      <!-- アップロード -->
+      <button
+        type="submit"
+        id="uploadButton"
+      >
+
+        アップロード
+
+      </button>
+
+
+    </form>
+
+  </div>
+
+
+  <script>
+
+
+    // =================================================
+    // 初期処理
+    // =================================================
+
+    window.addEventListener(
+      'DOMContentLoaded',
+      function() {
+
+        initializeYearSelect();
+
+      }
+    );
+
+
+    // =================================================
+    // 年プルダウン作成
+    //
+    // 2020年 ～ 2050年
+    // 現在年をデフォルト選択
+    // =================================================
+
+    function initializeYearSelect() {
+
+      const yearSelect =
+        document.getElementById(
+          'targetYear'
+        );
+
+
+      const currentYear =
+        new Date().getFullYear();
+
+
+      for (
+        let year = 2020;
+        year <= 2050;
+        year++
+      ) {
+
+        const option =
+          document.createElement(
+            'option'
+          );
+
+
+        option.value =
+          year;
+
+
+        option.textContent =
+          year;
+
+
+        if (
+          year === currentYear
+        ) {
+
+          option.selected =
+            true;
+        }
+
+
+        yearSelect.appendChild(
+          option
+        );
+      }
+    }
+
+
+    // =================================================
+    // フォーム送信
+    // =================================================
+
+    function handleSubmit(form) {
+
+
+      // ------------------------------
+      // HTML側入力チェック
+      // ------------------------------
+
+      if (!validateForm()) {
+        return;
+      }
+
+
+      // ------------------------------
+      // 年月をCode.gs用に変換
+      //
+      // 年：2026
+      // 月：09
+      //
+      // ↓
+      //
+      // 2026年-09月
+      // ------------------------------
+
+      const year =
+        document.getElementById(
+          'targetYear'
+        ).value;
+
+
+      const month =
+        document.getElementById(
+          'targetMonthSelect'
+        ).value;
+
+
+      document.getElementById(
+        'targetMonth'
+      ).value =
+        year +
+        '年-' +
+        month +
+        '月';
+
+
+      // ------------------------------
+      // アップロード状態
+      // ------------------------------
+
+      setUploadingState(true);
+
+
+      showMessage(
+        'アップロード中です...',
+        'processing'
+      );
+
+
+      // ------------------------------
+      // GAS呼び出し
+      // ------------------------------
+
+      google.script.run
+
+        .withSuccessHandler(
+          handleSuccess
+        )
+
+        .withFailureHandler(
+          handleFailure
+        )
+
+        .uploadFile(form);
+
+    }
+
+
+    // =================================================
+    // 入力チェック
+    // =================================================
+
+    function validateForm() {
+
+
+      const fileInput =
+        document.getElementById(
+          'uploadFile'
+        );
+
+
+      const sourceType =
+        document.getElementById(
+          'sourceType'
+        ).value;
+
+
+      const year =
+        document.getElementById(
+          'targetYear'
+        ).value;
+
+
+      const month =
+        document.getElementById(
+          'targetMonthSelect'
+        ).value;
+
+
+      // ------------------------------
+      // ファイル
+      // ------------------------------
+
+      if (
+        !fileInput.files ||
+        fileInput.files.length === 0
+      ) {
+
+        showMessage(
+          'Excelファイルを選択してください。',
+          'error'
+        );
+
+        return false;
+      }
+
+
+      const file =
+        fileInput.files[0];
+
+
+      const fileName =
+        file.name.toLowerCase();
+
+
+      if (
+        !fileName.endsWith('.xlsx') &&
+        !fileName.endsWith('.xls')
+      ) {
+
+        showMessage(
+          'Excelファイル（.xlsx または .xls）を選択してください。',
+          'error'
+        );
+
+        return false;
+      }
+
+
+      // ------------------------------
+      // ソース種別
+      // ------------------------------
+
+      if (!sourceType) {
+
+        showMessage(
+          'ソース種別を選択してください。',
+          'error'
+        );
+
+        return false;
+      }
+
+
+      // ------------------------------
+      // 年
+      // ------------------------------
+
+      if (!year) {
+
+        showMessage(
+          '対象年を選択してください。',
+          'error'
+        );
+
+        return false;
+      }
+
+
+      // ------------------------------
+      // 月
+      // ------------------------------
+
+      if (!month) {
+
+        showMessage(
+          '対象月を選択してください。',
+          'error'
+        );
+
+        return false;
+      }
+
+
+      return true;
+
+    }
+
+
+    // =================================================
+    // GAS正常応答
+    // =================================================
+
+    function handleSuccess(result) {
+
+
+      setUploadingState(false);
+
+
+      if (
+        result &&
+        result.success
+      ) {
+
+        showMessage(
+          'アップロードが完了しました',
+          'success'
+        );
+
+
+        // ----------------------------
+        // 入力値を初期化
+        // ----------------------------
+
+        document.getElementById(
+          'uploadForm'
+        ).reset();
+
+
+        /*
+         * resetすると年が先頭の2020年へ
+         * 戻る場合があるため、
+         * 現在年を再設定する
+         */
+
+        const currentYear =
+          new Date().getFullYear();
+
+
+        document.getElementById(
+          'targetYear'
+        ).value =
+          String(currentYear);
+
+
+        /*
+         * 月は未選択に戻す
+         */
+
+        document.getElementById(
+          'targetMonthSelect'
+        ).value =
+          '';
+
+
+        /*
+         * hidden項目もクリア
+         */
+
+        document.getElementById(
+          'targetMonth'
+        ).value =
+          '';
+
+
+        return;
+      }
+
+
+      // ------------------------------
+      // 処理上のエラー
+      // ------------------------------
+
+      const message =
+        result &&
+        result.message
+          ? result.message
+          : 'アップロードに失敗しました。';
+
+
+      showMessage(
+        message,
+        'error'
+      );
+
+    }
+
+
+    // =================================================
+    // 通信・GAS例外
+    // =================================================
+
+    function handleFailure(error) {
+
+
+      setUploadingState(false);
+
+
+      let message =
+        'アップロードに失敗しました。';
+
+
+      if (
+        error &&
+        error.message
+      ) {
+
+        message +=
+          error.message;
+      }
+
+
+      showMessage(
+        message,
+        'error'
+      );
+
+    }
+
+
+    // =================================================
+    // メッセージ表示
+    // =================================================
+
+    function showMessage(
+      text,
+      type
+    ) {
+
+
+      const messageElement =
+        document.getElementById(
+          'message'
+        );
+
+
+      messageElement.textContent =
+        text;
+
+
+      messageElement.className =
+        'message ' + type;
+
+
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+
+    }
+
+
+    // =================================================
+    // アップロード中制御
+    // =================================================
+
+    function setUploadingState(
+      uploading
+    ) {
+
+
+      const button =
+        document.getElementById(
+          'uploadButton'
+        );
+
+
+      button.disabled =
+        uploading;
+
+
+      button.textContent =
+        uploading
+          ? 'アップロード中...'
+          : 'アップロード';
+
+    }
+
+
+  </script>
+
+</body>
+
+</html>
