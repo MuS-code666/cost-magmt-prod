@@ -11,10 +11,19 @@
  * 3. ヘッダーマッピング
  * 4. 必須チェック
  * 5. 型正規化
- * 6. 正常行をstg_*へ出力
+ * 6. 正常行をstg_*へ出力（同一ソース×同一対象期間の既存行は洗い替え）
  * 7. 異常行を取込エラーへ出力
  * 8. 取込ログを記録
  * 9. 処理済みファイルを移動
+ *
+ * 対象期間の洗い替えについて:
+ * ファイル名（{ソース名}_{対象期間}_{登録日時}.csv）から対象期間
+ * （月次:YYYYMM／年度:YYYY）を抽出し、stg_*シートの管理列
+ * 「_対象期間」で同じ対象期間の既存行を判定・削除してから
+ * 新しい正常行を書き込む。これにより、同じ対象期間のファイルを
+ * 複数回取込んでも重複データが積み上がらない。
+ * 正常行が1件もないファイル（全行エラー等）は、既存データを
+ * 誤って消さないよう洗い替えを行わない。
  */
 
 const CONFIG = {
@@ -30,12 +39,8 @@ const CONFIG = {
   LOCK_WAIT_MS: 30000
 };
 
-const STAGING_SHEETS = {
-  SALES: 'stg_sales',
-  COST: 'stg_cost',
-  PRODUCTION: 'stg_production',
-  MONTHLY_REPORT: 'stg_monthly_report'
-};
+// stg_*シートで、対象期間（洗い替えキー）を保持する管理列
+const PERIOD_COLUMN_NAME = '_対象期間';
 
 const CONFIG_HEADERS = [
   'ソースID',
@@ -101,6 +106,7 @@ function processImportFiles() {
             processedAt,
             fileName,
             '',
+            '',
             0,
             0,
             0,
@@ -125,6 +131,7 @@ function processImportFiles() {
           processedAt,
           fileName,
           sourceConfig.sourceId,
+          result.targetPeriod || '',
           result.totalCount,
           result.successCount,
           result.errorCount,
@@ -139,6 +146,7 @@ function processImportFiles() {
         allLogRows.push([
           processedAt,
           fileName,
+          '',
           '',
           0,
           0,
@@ -283,6 +291,12 @@ function detectSource(fileName, configMap) {
  * CSVファイル1件を処理する。
  */
 function processCsvFile(file, sourceConfig, outputSs) {
+  const fileName = file.getName();
+
+  // ファイル名から対象期間（月次:YYYYMM／年度:YYYY）を抽出する。
+  // 抽出できない場合は洗い替えを行わず、従来どおりの追記のみとする。
+  const targetPeriod = extractTargetPeriod_(fileName, sourceConfig);
+
   const rows = parseCsvFile(file, sourceConfig);
 
   if (rows.length < sourceConfig.headerRowCount) {
@@ -333,7 +347,7 @@ function processCsvFile(file, sourceConfig, outputSs) {
     const result = validateAndNormalizeRow(
       rawRow,
       r + 1,
-      file.getName(),
+      fileName,
       sourceConfig,
       headerMapping
     );
@@ -345,24 +359,38 @@ function processCsvFile(file, sourceConfig, outputSs) {
     }
   }
 
-  // 正常行0件でもヘッダーだけは用意
-  ensureStagingSheet(outputSs, sourceConfig);
+  let washed = false;
 
   if (normalRows.length > 0) {
-    writeStagingData(outputSs, sourceConfig, normalRows);
+    writeStagingData(outputSs, sourceConfig, normalRows, targetPeriod);
+    washed = !!targetPeriod;
+  } else {
+    // 正常行が1件もない場合、既存データを誤って消さないよう
+    // 洗い替えは行わず、ヘッダーの存在確認のみ行う
+    ensureStagingSheet(outputSs, sourceConfig);
   }
 
   const errorCount = countUniqueErrorRows(errorRows);
+
+  let message;
+
+  if (errorCount > 0) {
+    message = `${errorCount}行にデータエラーがあります。`;
+  } else if (!targetPeriod) {
+    message = '正常終了（ファイル名から対象期間を判定できなかったため追記モードで処理しました）';
+  } else if (washed) {
+    message = '正常終了（対象期間を洗い替えました）';
+  } else {
+    message = '正常終了';
+  }
 
   return {
     totalCount: totalCount,
     successCount: normalRows.length,
     errorCount: errorCount,
     errorRows: errorRows,
-    message:
-      errorCount === 0
-        ? '正常終了'
-        : `${errorCount}行にデータエラーがあります。`
+    targetPeriod: targetPeriod,
+    message: message
   };
 }
 
@@ -687,20 +715,90 @@ function normalizeBoolean(value) {
 
 
 /**
- * 正常行をステージングシートへ一括追記する。
+ * 正常行をステージングシートへ書き込む。
+ *
+ * targetPeriodが判定できている場合は、書込み前に同一ソース×
+ * 同一対象期間の既存行を削除してから追記する（洗い替え）。
+ * targetPeriodがnullの場合は、従来どおり末尾への追記のみとする。
  */
-function writeStagingData(outputSs, sourceConfig, rows) {
-  const sheet = ensureStagingSheet(outputSs, sourceConfig);
+function writeStagingData(outputSs, sourceConfig, rows, targetPeriod) {
+  const staging = ensureStagingSheet(outputSs, sourceConfig);
+
+  if (targetPeriod) {
+    removeRowsForPeriod_(staging.sheet, staging.columnOrder, targetPeriod);
+  }
 
   if (rows.length === 0) {
     return;
   }
 
-  const startRow = Math.max(sheet.getLastRow() + 1, 2);
+  const reordered = rows.map(row =>
+    reorderRowForSheet_(row, sourceConfig, targetPeriod, staging.columnOrder)
+  );
 
-  sheet
-    .getRange(startRow, 1, rows.length, rows[0].length)
-    .setValues(rows);
+  const startRow = Math.max(staging.sheet.getLastRow() + 1, 2);
+
+  staging.sheet
+    .getRange(startRow, 1, reordered.length, staging.columnOrder.length)
+    .setValues(reordered);
+}
+
+
+/**
+ * stg_*シートから、指定した対象期間（PERIOD_COLUMN_NAME列の値）と
+ * 一致する既存行を削除する。
+ */
+function removeRowsForPeriod_(sheet, columnOrder, targetPeriod) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return;
+  }
+
+  const periodColumnIndex = columnOrder.indexOf(PERIOD_COLUMN_NAME);
+
+  if (periodColumnIndex === -1) {
+    return;
+  }
+
+  const numColumns = columnOrder.length;
+  const allData = sheet.getRange(2, 1, lastRow - 1, numColumns).getValues();
+
+  const remaining = allData.filter(
+    row => String(row[periodColumnIndex]) !== String(targetPeriod)
+  );
+
+  if (remaining.length === allData.length) {
+    // 削除対象なし
+    return;
+  }
+
+  sheet.getRange(2, 1, lastRow - 1, numColumns).clearContent();
+
+  if (remaining.length > 0) {
+    sheet.getRange(2, 1, remaining.length, numColumns).setValues(remaining);
+  }
+}
+
+
+/**
+ * 設定シート順の正規化済み行を、実際のシートの列順
+ * （columnOrder）に並べ替え、対象期間の値も追加する。
+ */
+function reorderRowForSheet_(row, sourceConfig, targetPeriod, columnOrder) {
+  const valueByColumn = {};
+
+  sourceConfig.fields.forEach((field, i) => {
+    valueByColumn[field.targetColumn] = row[i];
+  });
+
+  valueByColumn[PERIOD_COLUMN_NAME] = targetPeriod || '';
+
+  return columnOrder.map(columnName =>
+    Object.prototype.hasOwnProperty.call(valueByColumn, columnName)
+      ? valueByColumn[columnName]
+      : null
+  );
 }
 
 
@@ -794,43 +892,56 @@ function getCsvFilesRecursively(folder) {
 
 /**
  * ステージングシートを作成・取得する。
+ *
+ * シート名は常に「stg_」+ソースIDの小文字（例：SALES_BUDGET →
+ * stg_sales_budget）で決定する。新しいソースを追加する場合も、
+ * このフォールバック規則だけでシート名が一意に決まるため、
+ * ソースIDとシート名の対応表を別途コードで管理する必要はない。
+ *
+ * ヘッダー（列構成）の検証は、順序ではなく「必要な列がすべて
+ * 揃っているか」で行う。実際のシートの列順は columnOrder として
+ * 返し、書込み時にはこの順序に合わせて値を並べ替える。
  */
 function ensureStagingSheet(outputSs, sourceConfig) {
-  const sheetName =
-    STAGING_SHEETS[sourceConfig.sourceId] ||
-    'stg_' + sourceConfig.sourceId.toLowerCase();
+  const sheetName = 'stg_' + sourceConfig.sourceId.toLowerCase();
+  const expectedHeaders = sourceConfig.fields
+    .map(field => field.targetColumn)
+    .concat([PERIOD_COLUMN_NAME]);
 
   let sheet = outputSs.getSheetByName(sheetName);
-  const headers = sourceConfig.fields.map(field => field.targetColumn);
 
   if (!sheet) {
     sheet = outputSs.insertSheet(sheetName);
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, expectedHeaders.length).setValues([expectedHeaders]);
     sheet.setFrozenRows(1);
-    return sheet;
+    return { sheet: sheet, columnOrder: expectedHeaders };
   }
 
   if (sheet.getLastRow() === 0) {
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, expectedHeaders.length).setValues([expectedHeaders]);
     sheet.setFrozenRows(1);
-    return sheet;
+    return { sheet: sheet, columnOrder: expectedHeaders };
   }
 
-  // 既存ヘッダーが設定シートと一致するか確認
   const existingHeaders = sheet
-    .getRange(1, 1, 1, headers.length)
+    .getRange(1, 1, 1, sheet.getLastColumn())
     .getValues()[0]
-    .map(v => trimString(v));
+    .map(v => trimString(v))
+    .filter(v => v !== '');
 
-  const same = headers.every((header, i) => existingHeaders[i] === header);
+  const existingSet = new Set(existingHeaders);
+  const sameSet =
+    existingHeaders.length === expectedHeaders.length &&
+    expectedHeaders.every(header => existingSet.has(header));
 
-  if (!same) {
+  if (!sameSet) {
     throw new Error(
-      `ステージングシート「${sheetName}」のヘッダーが設定シートと一致しません。`
+      `ステージングシート「${sheetName}」の項目構成が設定シートと一致しません` +
+      `（列の過不足があります）。`
     );
   }
 
-  return sheet;
+  return { sheet: sheet, columnOrder: existingHeaders };
 }
 
 
@@ -859,6 +970,7 @@ function ensureSystemSheets(outputSs) {
       '処理日時',
       'ファイル名',
       'ソースID',
+      '対象期間',
       '総データ件数',
       '正常件数',
       'エラー件数',
@@ -889,22 +1001,41 @@ function ensureSheet(ss, sheetName, headers) {
 
 
 /**
+ * ファイル判定条件の「「〇〇」で始まる／を含む」を解析する。
+ *
+ * 例:
+ * 「売上_」で始まる → { prefix: '売上_', mode: 'startsWith' }
+ */
+function extractBracketedRule_(rule) {
+  const text = trimString(rule);
+
+  let match = text.match(/「(.+?)」.*始まる/);
+  if (match) {
+    return { prefix: match[1], mode: 'startsWith' };
+  }
+
+  match = text.match(/「(.+?)」.*含/);
+  if (match) {
+    return { prefix: match[1], mode: 'includes' };
+  }
+
+  return null;
+}
+
+
+/**
  * ファイル判定条件を評価する。
  *
  * 現在の設定シート例:
  * ファイル名が「売上_」で始まる
  */
 function matchesFileRule(fileName, rule, sourceName) {
-  const text = trimString(rule);
+  const parsed = extractBracketedRule_(rule);
 
-  let match = text.match(/「(.+?)」.*始まる/);
-  if (match) {
-    return fileName.startsWith(match[1]);
-  }
-
-  match = text.match(/「(.+?)」.*含/);
-  if (match) {
-    return fileName.includes(match[1]);
+  if (parsed) {
+    return parsed.mode === 'startsWith'
+      ? fileName.startsWith(parsed.prefix)
+      : fileName.includes(parsed.prefix);
   }
 
   // 条件を解釈できない場合のフォールバック
@@ -913,6 +1044,34 @@ function matchesFileRule(fileName, rule, sourceName) {
   }
 
   return false;
+}
+
+
+/**
+ * ファイル名（{プレフィックス}{対象期間}_{登録日時}.csv）から
+ * 対象期間（月次:YYYYMM／年度:YYYY の数字部分）を抽出する。
+ *
+ * ファイル判定条件が「〜で始まる」形式でない場合や、
+ * ファイル名が規則に沿っていない場合はnullを返す。
+ */
+function extractTargetPeriod_(fileName, sourceConfig) {
+  const parsed = extractBracketedRule_(sourceConfig.fileRule);
+
+  const prefix =
+    parsed && parsed.mode === 'startsWith'
+      ? parsed.prefix
+      : sourceConfig.sourceName
+        ? sourceConfig.sourceName + '_'
+        : null;
+
+  if (!prefix || fileName.indexOf(prefix) !== 0) {
+    return null;
+  }
+
+  const rest = fileName.slice(prefix.length);
+  const match = rest.match(/^(\d{4}|\d{6})(?:_|\.)/);
+
+  return match ? match[1] : null;
 }
 
 
