@@ -9,6 +9,7 @@
 //   のうち、差異率と差異額がどちらも閾値以上の行。
 //
 // 事前準備: スクリプトプロパティ CHAT_WEBHOOK_URL に Google Chat の Webhook URL を保存する。
+// 修正の反映: このファイルを編集し、リポジトリ直下で npm run gas:push（手順は GAS/README.md）。
 // ============================================================
 
 const ALERT_CONFIG = {
