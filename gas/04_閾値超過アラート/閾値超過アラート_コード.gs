@@ -141,8 +141,7 @@ function buildMessage_(month, rows) {
 }
 
 function postToChat_(text) {
-  const url = PropertiesService.getScriptProperties().getProperty('CHAT_WEBHOOK_URL');
-  if (!url) throw new Error('スクリプトプロパティ CHAT_WEBHOOK_URL が未設定です');
+  const url = getWebhookUrl_();
 
   const response = UrlFetchApp.fetch(url, {
     method: 'post',
@@ -151,8 +150,34 @@ function postToChat_(text) {
     muteHttpExceptions: true
   });
   if (response.getResponseCode() !== 200) {
-    throw new Error('Chatへの送信に失敗しました（HTTP ' + response.getResponseCode() + '）');
+    throw new Error(
+      'Chatへの送信に失敗しました（HTTP ' + response.getResponseCode() + '）' +
+      response.getContentText().slice(0, 300)
+    );
   }
+}
+
+// 貼り付け時に混ざりやすい前後の空白・引用符は取り除く
+function getWebhookUrl_() {
+  const raw = PropertiesService.getScriptProperties().getProperty('CHAT_WEBHOOK_URL');
+  if (!raw) throw new Error('スクリプトプロパティ CHAT_WEBHOOK_URL が未設定です');
+  return raw.trim().replace(/^["']+|["']+$/g, '');
+}
+
+// Webhook URLの形を確認する（URLの中身はログに出さない）。送信は行わない。
+function checkWebhookUrl() {
+  const raw = PropertiesService.getScriptProperties().getProperty('CHAT_WEBHOOK_URL');
+  if (!raw) {
+    Logger.log('CHAT_WEBHOOK_URL が未設定です');
+    return;
+  }
+  const url = getWebhookUrl_();
+  Logger.log('文字数: ' + url.length + '（通常は150文字前後）');
+  Logger.log('先頭が https://chat.googleapis.com/v1/spaces/ で始まる: ' + (url.indexOf('https://chat.googleapis.com/v1/spaces/') === 0));
+  Logger.log('/messages を含む: ' + (url.indexOf('/messages') > 0));
+  Logger.log('key= を含む: ' + /[?&]key=[^&]+/.test(url));
+  Logger.log('token= を含む: ' + /[?&]token=[^&]+/.test(url));
+  Logger.log('前後の空白・引用符を自動で除去した: ' + (raw !== url));
 }
 
 
