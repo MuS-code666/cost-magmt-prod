@@ -48,6 +48,22 @@
 --      - prior_year_total_cost, cost_yoy_amount, cost_yoy_rate を追加。
 --        計算方法は既存の profit_yoy_* と同じ仕組み
 --        （product_profit を1年ずらして自己結合）。
+--
+-- Phase 5 Task 5-0 対応（2026-09-20）
+-- H. 「ワーストN」の定義をLooker StudioとPhase5（Claude分析）で共通化する
+--      ため、cost_budget_variance_rank 列を追加。
+--      - 従来はLooker Studio側の並べ替え設定・表示件数（上位10件）だけで
+--        「ワースト」を定義しており、Phase5のBigQuery MCP側で同じ定義を
+--        再現する手段がなかったため。
+--      - 定義: 年月×部門（factory_code）内で、原価の予算差異額
+--        （cost_budget_variance_amount）が大きい順の順位。
+--      - 既存の列・計算ロジックは一切変更せず、最終SELECTを result という
+--        CTEに退避し、その外側でRANK() OVER(...)を1列追加するだけに留めた
+--        （SELECTリスト内で同じSELECTの別名を再参照できないGoogleSQLの
+--        制約のため、外側のSELECTから参照する構成にしている）。
+--      - Looker Studio P3のワースト表は、この列で
+--        cost_budget_variance_rank <= 10 のようにフィルタする運用に
+--        切り替える想定（Looker Studio側の設定変更は別途実施）。
 -- ================================================================
 
 CREATE OR REPLACE VIEW `cost-mgmt-prod-507701.mart.v_variance` AS
@@ -598,13 +614,19 @@ base AS (
   FULL OUTER JOIN budget_cost_by_product bcp
     ON COALESCE(pp.target_month, prb.target_month) = bcp.target_month
    AND COALESCE(pp.product_code, prb.product_code) = bcp.product_code
-)
+),
 
 
 /* ============================================================
-   13. 最終結果（年月×製品）
+   13. 年月×製品の主要指標（ワーストN順位列を除く全列）
+   ワーストN順位（Task 5-0）はこのCTEの外側で付与する。
+   同一SELECT内では直前で定義した列別名を再参照できないため
+   （GoogleSQLの制約）、cost_budget_variance_amount等を確定させた
+   このCTEを土台に、外側のSELECTでRANK() OVER(...)を追加する。
    ============================================================ */
-SELECT
+result AS (
+
+  SELECT
 
   base.target_month,
   base.product_code,
@@ -795,7 +817,26 @@ LEFT JOIN sales_by_product_prior_year spy
 
 LEFT JOIN product_profit_prior_year ppy
   ON base.target_month = ppy.target_month
- AND base.product_code = ppy.product_code;
+ AND base.product_code = ppy.product_code
+)
+
+
+/* ============================================================
+   14. ワーストN順位列を付与して最終出力
+   定義（Phase 5 Task 5-0 / Looker Studio P3 共通）:
+     年月×部門（factory_code）内で、原価の予算差異額
+     （cost_budget_variance_amount）が大きい順の順位。
+   ============================================================ */
+SELECT
+
+  result.*,
+
+  RANK() OVER (
+    PARTITION BY result.target_month, result.factory_code
+    ORDER BY result.cost_budget_variance_amount DESC
+  ) AS cost_budget_variance_rank
+
+FROM result;
 
 
 -- ================================================================
