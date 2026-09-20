@@ -1,0 +1,10 @@
+# サービスアカウントキー（JSON）は絶対にコミットしない
+*-key.json
+*-keyfile.json
+service-account*.json
+credentials*.json
+secrets/
+
+# 環境変数ファイル
+.env
+.env.*
