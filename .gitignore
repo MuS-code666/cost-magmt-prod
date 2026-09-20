@@ -8,3 +8,7 @@ secrets/
 # 環境変数ファイル
 .env
 .env.*
+
+# Node.js / clasp
+node_modules/
+.clasprc.json

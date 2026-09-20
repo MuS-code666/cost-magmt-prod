@@ -1,0 +1,12 @@
+{
+  "name": "cost-mgmt-prod",
+  "private": true,
+  "description": "原価管理App。GAS（Apps Script）の反映用ツールのみを管理する。",
+  "scripts": {
+    "gas:status": "clasp status --project GAS/04_閾値超過アラート",
+    "gas:push": "clasp push --project GAS/04_閾値超過アラート"
+  },
+  "devDependencies": {
+    "@google/clasp": "3.4.1"
+  }
+}
