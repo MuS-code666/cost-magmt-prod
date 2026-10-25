@@ -42,12 +42,15 @@
     "tokens": [
       { "token": "this_month",          "phrases": ["今月", "当月"],                         "expand": "今日の月。確定前のため結果に「速報」と表示する" },
       { "token": "last_month",          "phrases": ["先月", "前月"],                         "expand": "今日の前月" },
-      { "token": "month(YYYY-MM)",      "phrases": ["2026年9月", "9月", "26年9月"],          "expand": "その月。年がなければ今日以前で直近のその月" },
+      { "token": "month(YYYY-MM)",      "phrases": ["2026年9月", "26年9月"],                 "expand": "その月" },
+      { "token": "month(M)",            "phrases": ["9月", "3月分"],                         "expand": "年がない月。今日以前で直近のその月" },
       { "token": "last_n_months(N)",    "phrases": ["直近3か月", "過去半年", "この1年"],     "expand": "先月までの N か月（当月を含めない）。半年 = 6、1年 = 12" },
       { "token": "range(YYYY-MM,YYYY-MM)", "phrases": ["4月から9月", "2025年10月〜2026年3月"], "expand": "両端を含む月の範囲" },
       { "token": "current_fiscal_year", "phrases": ["今期", "今年度", "期初から"],             "expand": "今年度の開始月〜先月（確定済みの月まで）" },
-      { "token": "fiscal_year(YYYY)",   "phrases": ["2025年度", "前期", "昨年度"],           "expand": "その年度の 4月〜翌3月。前期・昨年度は今年度の 1つ前" },
-      { "token": "fiscal_half(YYYY,H)", "phrases": ["上期", "下期", "上半期"],               "expand": "H1 = 4〜9月、H2 = 10〜翌3月。年度がなければ今年度" }
+      { "token": "previous_fiscal_year", "phrases": ["前期", "昨年度", "前年度"],           "expand": "今年度の 1つ前の年度の 4月〜翌3月。比較先の「前年度と比べて」は compare: prev_year" },
+      { "token": "fiscal_year(YYYY)",   "phrases": ["2025年度"],                             "expand": "その年度の 4月〜翌3月" },
+      { "token": "fiscal_half(H)",      "phrases": ["上期", "下期", "上半期"],               "expand": "今年度の H1 = 4〜9月、H2 = 10〜翌3月" },
+      { "token": "fiscal_half(YYYY,H)", "phrases": ["2025年度上期"],                         "expand": "その年度の H1 / H2" }
     ],
     "not_periods": [
       { "phrases": ["前年", "去年と比べて", "前年同月"], "meaning": "期間ではなく compare: prev_year" },

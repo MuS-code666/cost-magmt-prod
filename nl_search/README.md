@@ -143,7 +143,7 @@ LIMIT 200;
 
 | # | 内容 | 決めること | 状態 |
 | --- | --- | --- | --- |
-| 1 | Claude のモデルと API キーの置き場所 | モデルはテストセットで比較して決める。キーはスクリプトプロパティに置き、リポジトリには入れない | 実装時 |
+| 1 | Claude のモデル | 既定は `claude-opus-5-5`（`effort: low`）。別モデルにするかは `nlRunTestset` の一致率と応答時間を見て決める。API キーはスクリプトプロパティ `ANTHROPIC_API_KEY` に置き、リポジトリには入れない | 測定待ち |
 | 2 | 職種プリセット | 利用者が少ないうちは置かず、カタログの既定（`conflicts.default`）だけで運用する | 仮決定 |
 
 ## 進め方
@@ -154,7 +154,22 @@ LIMIT 200;
 | 2 ビュー化 | `sql/05_explore_v_cost作成.sql`。BigQuery で作成し、v_variance との合計の突合と dry run（期間あり・なし）を記録する（`sql/06_explore_v_cost検証.sql`） | 済（下の検証記録） |
 | 3 カタログと辞書 | `catalog/metrics.json`、`catalog/aliases.json` | 初版 |
 | 4 テストセット | `tests/nl_search/testset.json`。43 問（通常 34・候補選択 2・範囲外 7）と期待する条件 | 初版（現場の言い方の追加待ち） |
-| 5 変換と改善 | GAS Web アプリ、5 要素（指標・切り口・期間・絞り込み・比較）の採点 | 未着手 |
+| 5 変換と改善 | GAS Web アプリ（`gas/05_自然言語検索/`）、5 要素（指標・切り口・期間・絞り込み・比較）の採点（`nlRunTestset`） | 実装済み・Apps Script への反映待ち |
+
+## STEP 5 実装メモ
+
+| ファイル | 役割 |
+| --- | --- |
+| `Webアプリ.gs` | 画面の入口。`nlInterpret`（段階1: 解釈・候補・見積もり）と `nlExecute`（段階2: 検証し直して実行）、ログの書き込み |
+| `条件変換.gs` | Claude API の呼び出し。structured outputs で条件 JSON の形を固定し、システムプロンプトはカタログから組み立てる |
+| `条件の確定.gs` | 辞書照合・期間トークンの展開・用語の衝突の検出・画面から来た条件の検証（GAS のサービスを使わない） |
+| `SQL.gs` | SQL の組み立て（列名はカタログ、値はパラメータ）、BigQuery の実行・dry run、工場/製品/顧客の一覧（6時間キャッシュ） |
+| `テスト.gs` | `nlCheckSetup`（接続確認）、`nlRunTestset`（テストセット全問を Claude に通して採点） |
+| `index.html` | 画面。条件チップ（既定で決めた指標は黄色・切り替え可）、候補の選択、期間・切り口・比較・並び順の修正、結果表、実行した SQL |
+
+- Claude: 既定モデル `claude-opus-5-5`、`effort: low`。スクリプトプロパティ `CLAUDE_MODEL` で変えられる。対応モデルでは安全分類器に断られたときの代替（`fallbacks: "default"`）を有効にしている。
+- Claude の `type` はそのまま使わず、確定した条件の中身から型を決め直す（例: 切り口があれば内訳、月があれば推移）。
+- 手元テスト（`npm run test:nl`）は、テストセットの期待値を「Claude が理想どおりに返した出力」として流し、Claude 以外の処理が満点になることを確かめる。Claude を含めた一致率は Apps Script で `nlRunTestset` を実行して測る。
 
 ## STEP 2 検証記録（2026-10-25、`sql/06_explore_v_cost検証.sql`）
 
