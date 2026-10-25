@@ -38,7 +38,7 @@
 
   "period_tokens": {
     "fiscal_year_start_month": 4,
-    "fiscal_year_note": "サンプルデータが 2024-04〜2027-03 のため 4月始まりと仮定（要確認）。年度は開始年で呼ぶ（2026年度 = 2026-04〜2027-03）",
+    "fiscal_year_note": "4月始まり（2026-10-25 確定）。年度は開始年で呼ぶ（2026年度 = 2026-04〜2027-03）",
     "tokens": [
       { "token": "this_month",          "phrases": ["今月", "当月"],                         "expand": "今日の月。確定前のため結果に「速報」と表示する" },
       { "token": "last_month",          "phrases": ["先月", "前月"],                         "expand": "今日の前月" },
