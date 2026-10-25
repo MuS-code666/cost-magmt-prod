@@ -148,6 +148,7 @@
     "max_group_by": 2,
     "max_rows": 200,
     "max_ranking_limit": 50,
-    "max_months": 36
+    "max_months": 36,
+    "maximum_bytes_billed": 104857600
   }
 }
