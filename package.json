@@ -8,7 +8,7 @@
     "nl:build": "node scripts/build_nl_catalog.js",
     "test:nl": "npm run nl:build && node tests/nl_search/run_local.js",
     "gas:status:nl": "npm run nl:build && cd gas/05_自然言語検索 && clasp status",
-    "gas:push:nl": "npm run test:nl && cd gas/05_自然言語検索 && clasp push"
+    "gas:push:nl": "npm run test:nl && cd gas/05_自然言語検索 && clasp push --force"
   },
   "devDependencies": {
     "@google/clasp": "3.4.1"
