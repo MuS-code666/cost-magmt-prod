@@ -153,7 +153,7 @@ LIMIT 200;
 | 1 棚卸し | 上の表 | 済 |
 | 2 ビュー化 | `sql/05_explore_v_cost作成.sql`。BigQuery で作成し、v_variance との合計の突合と dry run（期間あり・なし）を記録する（`sql/06_explore_v_cost検証.sql`） | 済（下の検証記録） |
 | 3 カタログと辞書 | `catalog/metrics.json`、`catalog/aliases.json` | 初版 |
-| 4 テストセット | 30〜50 問と期待する条件 JSON（`tests/nl_search/`）。聞き返し・範囲外を 2〜3 割含める | 未着手 |
+| 4 テストセット | `tests/nl_search/testset.json`。43 問（通常 34・候補選択 2・範囲外 7）と期待する条件 | 初版（現場の言い方の追加待ち） |
 | 5 変換と改善 | GAS Web アプリ、5 要素（指標・切り口・期間・絞り込み・比較）の採点 | 未着手 |
 
 ## STEP 2 検証記録（2026-10-25、`sql/06_explore_v_cost検証.sql`）
