@@ -154,7 +154,22 @@ LIMIT 200;
 | 2 ビュー化 | `sql/05_explore_v_cost作成.sql`。BigQuery で作成し、v_variance との合計の突合と dry run（期間あり・なし）を記録する（`sql/06_explore_v_cost検証.sql`） | 済（下の検証記録） |
 | 3 カタログと辞書 | `catalog/metrics.json`、`catalog/aliases.json` | 初版 |
 | 4 テストセット | `tests/nl_search/testset.json`。43 問（通常 34・候補選択 2・範囲外 7）と期待する条件 | 初版（現場の言い方の追加待ち） |
-| 5 変換と改善 | GAS Web アプリ（`gas/05_自然言語検索/`）、5 要素（指標・切り口・期間・絞り込み・比較）の採点（`nlRunTestset`） | 実装済み・Apps Script への反映待ち |
+| 5 変換と改善 | GAS Web アプリ（`gas/05_自然言語検索/`）、5 要素（指標・切り口・期間・絞り込み・比較）の採点（`nlRunTestset`） | 初版公開（2026-10-25）。下の採点記録 |
+
+## STEP 5 採点記録
+
+| 日付 | モデル | status | 指標 | 切り口 | 期間 | 絞り込み | 比較 | 既定の明示 | 所要時間 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-25 | claude-opus-5-5（effort low） | 100% | 100% | 100% | 100% | 100% | 100% | 100% | 43問で約32秒（5問ずつ並列、1問あたり3〜4秒） |
+
+- 初回の接続確認（`nlCheckSetup`）: BigQuery の一覧は工場2・製品50・顧客25件。dry run の見積もりは 642,730 bytes。
+- テストセットはプロンプトと同じ作成者が書いたため、言い方が素直な問いに偏っている可能性がある。公開後は `explore.nl_search_log` から、候補を選び直した問い・範囲外になった問い・指標を切り替えた問いを週次で拾い、テストセットに追加して採点し直す。
+
+## 公開
+
+- Web アプリの URL: `https://script.google.com/macros/s/AKfycbxcihM5ermgV7DDMj1bstb6U6NEXnaNwt69d1jnHn2ar1U8n4Y3J8IFIIJ-P-bDOid8gQ/exec`（デプロイ @1「初版（原価系7指標）」）
+- 所有者（msudo）として実行し、アクセスは組織内のアカウントに限る（`appsscript.json` の `webapp`）。
+- コードを直したら `npm run gas:push:nl` で反映し、同じ URL のまま新しい版にするには `gas/05_自然言語検索` で `clasp update-deployment AKfycbxcihM5ermgV7DDMj1bstb6U6NEXnaNwt69d1jnHn2ar1U8n4Y3J8IFIIJ-P-bDOid8gQ --description "<変更内容>"` を実行する。
 
 ## STEP 5 実装メモ
 
