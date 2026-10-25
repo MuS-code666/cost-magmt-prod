@@ -151,7 +151,7 @@ LIMIT 200;
 | STEP | 成果物 | 状態 |
 | --- | --- | --- |
 | 1 棚卸し | 上の表 | 済 |
-| 2 ビュー化 | `sql/05_explore_v_cost作成.sql`。BigQuery で作成し、v_variance との合計の突合と dry run（期間あり・なし）を記録する | SQL 作成済み・未実行 |
+| 2 ビュー化 | `sql/05_explore_v_cost作成.sql`。BigQuery で作成し、v_variance との合計の突合と dry run（期間あり・なし）を記録する（`sql/06_explore_v_cost検証.sql`） | ビュー作成済み（2026-10-25）・検証中 |
 | 3 カタログと辞書 | `catalog/metrics.json`、`catalog/aliases.json` | 初版 |
 | 4 テストセット | 30〜50 問と期待する条件 JSON（`tests/nl_search/`）。聞き返し・範囲外を 2〜3 割含める | 未着手 |
 | 5 変換と改善 | GAS Web アプリ、5 要素（指標・切り口・期間・絞り込み・比較）の採点 | 未着手 |
