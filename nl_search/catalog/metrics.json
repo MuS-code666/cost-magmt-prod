@@ -1,0 +1,154 @@
+{
+  "version": "2026-10-25",
+  "view": "cost-mgmt-prod-507701.explore.v_cost",
+  "period_column": "年月",
+  "unit_note": "金額はすべて円。v_cost の列説明（BigQuery の OPTIONS）が列の定義の正",
+
+  "metrics": [
+    {
+      "metric_id": "total_cost",
+      "label": "総原価",
+      "expr": "SUM(`総原価`)",
+      "format": "yen",
+      "description": "製品の実績原価（円）。直接材料費と、生産時間で配賦した間接費の合計。原価予算は含まない。",
+      "synonyms": ["原価", "総原価", "実績原価", "製造原価", "コスト", "かかった費用", "費用"],
+      "not_for": "「予算」「計画」を聞かれたら budget_cost。予算との差は cost_budget_variance。",
+      "worse_when": "up",
+      "allowed_group_by": ["factory", "product", "customer", "month"],
+      "allowed_compare": ["prev_year", "prev_month"],
+      "example_questions": ["先月の原価はいくら", "工場別の原価を前年と比べて", "原価が大きい上位5製品"],
+      "owner": "未定"
+    },
+    {
+      "metric_id": "direct_material_cost",
+      "label": "直接材料費",
+      "expr": "SUM(`直接材料費`)",
+      "format": "yen",
+      "description": "原材料費（円）。ロットで製品に直接紐づけた額。年月は原価の計上月ではなく生産月。",
+      "synonyms": ["材料費", "直接材料費", "原材料費", "材料代", "樹脂代"],
+      "not_for": "電力・人件費などは indirect_cost。両方の合計は total_cost。",
+      "worse_when": "up",
+      "allowed_group_by": ["factory", "product", "customer", "month"],
+      "allowed_compare": ["prev_year", "prev_month"],
+      "example_questions": ["先月の材料費を製品別に", "材料費の直近12か月の推移"],
+      "owner": "未定"
+    },
+    {
+      "metric_id": "indirect_cost",
+      "label": "間接費",
+      "expr": "SUM(`間接費`)",
+      "format": "yen",
+      "description": "電力費・労務費・減価償却費・工場賃借料（円）を、生産時間の比率で製品に配賦した額。",
+      "synonyms": ["間接費", "加工費", "経費", "配賦費", "製造間接費"],
+      "not_for": "費目別（電力費だけ等）の内訳は出せない。費目別を聞かれたら unsupported。",
+      "worse_when": "up",
+      "allowed_group_by": ["factory", "product", "customer", "month"],
+      "allowed_compare": ["prev_year", "prev_month"],
+      "example_questions": ["第二成形工場の間接費を前年と比べて", "間接費が大きい製品は"],
+      "owner": "未定"
+    },
+    {
+      "metric_id": "budget_cost",
+      "label": "原価予算",
+      "expr": "SUM(`原価予算`)",
+      "format": "yen",
+      "description": "原価予算（円）。工場×マシン単位の予算を実績の生産時間比率で製品に配賦した額。実績生産がない月・製品は 0。",
+      "synonyms": ["予算", "原価予算", "予算原価", "計画", "予定原価"],
+      "not_for": "実際にかかった額は total_cost。売上予算はこの検索の対象外。",
+      "worse_when": null,
+      "allowed_group_by": ["factory", "product", "customer", "month"],
+      "allowed_compare": ["prev_year", "prev_month"],
+      "example_questions": ["今期の原価予算を工場別に"],
+      "owner": "未定"
+    },
+    {
+      "metric_id": "cost_budget_variance",
+      "label": "原価予算差異額",
+      "expr": "SUM(`総原価`) - SUM(`原価予算`)",
+      "format": "yen",
+      "description": "総原価 − 原価予算（円）。プラスは予算超過（悪化）。予算 0 の行も総原価がそのまま差異に入る（月報・閾値アラートと同じ計算）。",
+      "synonyms": ["予算差異", "原価予算差異", "予実差", "予算との差", "予算オーバー", "予算超過額", "差異"],
+      "not_for": "前年との差は compare: prev_year を使う（この指標ではない）。率を聞かれたら cost_budget_variance_rate。",
+      "worse_when": "up",
+      "allowed_group_by": ["factory", "product", "customer", "month"],
+      "allowed_compare": ["prev_year", "prev_month"],
+      "example_questions": ["先月の予算差異を工場別に", "予算オーバーが大きい上位10製品"],
+      "owner": "未定"
+    },
+    {
+      "metric_id": "cost_budget_variance_rate",
+      "label": "原価予算差異率",
+      "expr": "SAFE_DIVIDE(SUM(`総原価`) - SUM(`原価予算`), NULLIF(SUM(`原価予算`), 0))",
+      "format": "percent",
+      "description": "(総原価 − 原価予算) ÷ 原価予算。行の率を平均せず、額の合計から計算し直す。予算 0 のときは空欄。",
+      "synonyms": ["予算差異率", "差異率", "予算比", "予算超過率", "予算との差（%）"],
+      "not_for": "額を聞かれたら cost_budget_variance。",
+      "worse_when": "up",
+      "allowed_group_by": ["factory", "product", "customer", "month"],
+      "allowed_compare": ["prev_year", "prev_month"],
+      "example_questions": ["先月の予算差異率を工場別に", "差異率が高い製品トップ5"],
+      "owner": "未定"
+    },
+    {
+      "metric_id": "cost_per_kg",
+      "label": "kg当たり原価",
+      "expr": "SAFE_DIVIDE(SUM(`総原価`), NULLIF(SUM(`生産量kg`), 0))",
+      "format": "yen_per_kg",
+      "description": "総原価 ÷ 生産量（円/kg）。行の値を平均せず、合計どうしで割る。生産量 0 のときは空欄。",
+      "synonyms": ["kg当たり原価", "キロ当たり原価", "単位原価", "原単位", "kg単価", "製造単価"],
+      "not_for": "販売単価・売価は対象外。",
+      "worse_when": "up",
+      "allowed_group_by": ["factory", "product", "customer", "month"],
+      "allowed_compare": ["prev_year", "prev_month"],
+      "example_questions": ["製品別のkg当たり原価", "kg当たり原価の推移"],
+      "owner": "未定"
+    }
+  ],
+
+  "dimensions": [
+    { "dim": "factory",  "label": "工場", "column": "工場", "synonyms": ["工場", "部門", "部署", "拠点", "工場別", "部門別"] },
+    { "dim": "product",  "label": "製品", "column": "製品", "synonyms": ["製品", "品目", "部品", "アイテム", "製品別", "品目別"] },
+    { "dim": "customer", "label": "顧客", "column": "顧客", "synonyms": ["顧客", "得意先", "取引先", "客先", "お客さん", "顧客別"] },
+    { "dim": "month",    "label": "月",   "column": "年月", "synonyms": ["月別", "月ごと", "推移", "月次", "毎月"] }
+  ],
+
+  "compares": [
+    { "compare": "prev_year",  "label": "前年同月", "synonyms": ["前年", "去年", "昨年", "前年同月", "前年比", "前年同期"] },
+    { "compare": "prev_month", "label": "前月",     "synonyms": ["前月比", "先月と比べて", "前の月"] }
+  ],
+
+  "conflicts": [
+    {
+      "term": "原価",
+      "candidates": ["total_cost", "direct_material_cost", "indirect_cost", "cost_per_kg"],
+      "default": "total_cost",
+      "rule": "「材料」があれば direct_material_cost、「間接」「加工」があれば indirect_cost、「kg」「単価」「原単位」があれば cost_per_kg。どれもなければ既定を使い、チップで切り替えを出す。"
+    },
+    {
+      "term": "差異",
+      "candidates": ["cost_budget_variance", "cost_budget_variance_rate", "compare:prev_year"],
+      "default": "cost_budget_variance",
+      "rule": "「前年」「去年」があれば前年比較（指標は total_cost、compare: prev_year）。「率」「%」があれば率。どれもなければ予算差異額（月報・アラートと同じ定義）を既定にし、チップで切り替えを出す。"
+    },
+    {
+      "term": "予算",
+      "candidates": ["budget_cost", "cost_budget_variance"],
+      "default": "budget_cost",
+      "rule": "「差」「オーバー」「超過」があれば cost_budget_variance。"
+    }
+  ],
+
+  "out_of_scope": [
+    { "terms": ["売上", "売り上げ", "利益", "粗利", "採算", "販売"], "message": "売上・利益はまだ検索の対象外です（原価系の指標から開始しています）。" },
+    { "terms": ["電力費", "労務費", "人件費", "減価償却", "賃借料", "家賃"], "message": "費目別の内訳はまだ出せません。間接費（電力・労務・償却・賃借の合計）なら確認できます。" },
+    { "terms": ["マシン", "号機", "設備", "作業員", "担当者"], "message": "マシン別・作業員別の切り口はまだ対象外です。工場別・製品別・顧客別なら確認できます。" }
+  ],
+
+  "limits": {
+    "max_group_by": 2,
+    "max_rows": 200,
+    "max_ranking_limit": 50,
+    "max_months": 36,
+    "maximum_bytes_billed": 104857600
+  }
+}

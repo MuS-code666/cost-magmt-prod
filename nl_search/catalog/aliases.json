@@ -1,0 +1,60 @@
+{
+  "version": "2026-10-25",
+  "note": "値の辞書（設計資料の dim_alias）。正式名称は master 表の名称。マスタの件数が少ない（工場2・製品50・顧客25）ため GAS 内で照合する。",
+
+  "normalize": [
+    "全角英数字・記号を半角にそろえる（NFKC）",
+    "大文字・小文字をそろえる",
+    "空白を除く",
+    "「株式会社」「(株)」「㈱」を除く",
+    "漢数字の一〜九を算用数字にそろえる（第一 → 第1）"
+  ],
+
+  "patterns": [
+    {
+      "dim": "product",
+      "regex": "^(?:成形)?(?:部品)?p0*([1-9][0-9]?)$",
+      "canonical_template": "成形部品P{2桁}",
+      "examples": ["P1", "p01", "部品P01", "成形部品P1"]
+    },
+    {
+      "dim": "customer",
+      "regex": "^顧客(?:企業)?0*([1-9][0-9]?)$",
+      "canonical_template": "顧客企業{2桁}株式会社",
+      "examples": ["顧客1", "顧客企業01", "顧客企業01株式会社"]
+    }
+  ],
+
+  "aliases": [
+    { "dim": "factory", "canonical": "第一成形工場", "alias": "第1工場",   "source": "manual", "updated_at": "2026-10-25" },
+    { "dim": "factory", "canonical": "第一成形工場", "alias": "第1",       "source": "manual", "updated_at": "2026-10-25" },
+    { "dim": "factory", "canonical": "第一成形工場", "alias": "1工場",     "source": "manual", "updated_at": "2026-10-25" },
+    { "dim": "factory", "canonical": "第一成形工場", "alias": "第1成形",   "source": "manual", "updated_at": "2026-10-25" },
+    { "dim": "factory", "canonical": "第二成形工場", "alias": "第2工場",   "source": "manual", "updated_at": "2026-10-25" },
+    { "dim": "factory", "canonical": "第二成形工場", "alias": "第2",       "source": "manual", "updated_at": "2026-10-25" },
+    { "dim": "factory", "canonical": "第二成形工場", "alias": "2工場",     "source": "manual", "updated_at": "2026-10-25" },
+    { "dim": "factory", "canonical": "第二成形工場", "alias": "第2成形",   "source": "manual", "updated_at": "2026-10-25" }
+  ],
+
+  "period_tokens": {
+    "fiscal_year_start_month": 4,
+    "fiscal_year_note": "4月始まり（2026-10-25 確定）。年度は開始年で呼ぶ（2026年度 = 2026-04〜2027-03）",
+    "tokens": [
+      { "token": "this_month",          "phrases": ["今月", "当月"],                         "expand": "今日の月。確定前のため結果に「速報」と表示する" },
+      { "token": "last_month",          "phrases": ["先月", "前月"],                         "expand": "今日の前月" },
+      { "token": "month(YYYY-MM)",      "phrases": ["2026年9月", "26年9月"],                 "expand": "その月" },
+      { "token": "month(M)",            "phrases": ["9月", "3月分"],                         "expand": "年がない月。今日以前で直近のその月" },
+      { "token": "last_n_months(N)",    "phrases": ["直近3か月", "過去半年", "この1年"],     "expand": "先月までの N か月（当月を含めない）。半年 = 6、1年 = 12" },
+      { "token": "range(YYYY-MM,YYYY-MM)", "phrases": ["4月から9月", "2025年10月〜2026年3月"], "expand": "両端を含む月の範囲" },
+      { "token": "current_fiscal_year", "phrases": ["今期", "今年度", "期初から"],             "expand": "今年度の開始月〜先月（確定済みの月まで）" },
+      { "token": "previous_fiscal_year", "phrases": ["前期", "昨年度", "前年度"],           "expand": "今年度の 1つ前の年度の 4月〜翌3月。比較先の「前年度と比べて」は compare: prev_year" },
+      { "token": "fiscal_year(YYYY)",   "phrases": ["2025年度"],                             "expand": "その年度の 4月〜翌3月" },
+      { "token": "fiscal_half(H)",      "phrases": ["上期", "下期", "上半期"],               "expand": "今年度の H1 = 4〜9月、H2 = 10〜翌3月" },
+      { "token": "fiscal_half(YYYY,H)", "phrases": ["2025年度上期"],                         "expand": "その年度の H1 / H2" }
+    ],
+    "not_periods": [
+      { "phrases": ["前年", "去年と比べて", "前年同月"], "meaning": "期間ではなく compare: prev_year" },
+      { "phrases": ["前月比"],                         "meaning": "期間ではなく compare: prev_month" }
+    ]
+  }
+}

@@ -1,10 +1,14 @@
 {
   "name": "cost-mgmt-prod",
   "private": true,
-  "description": "原価管理App。GAS（Apps Script）の反映用ツールのみを管理する。",
+  "description": "原価管理App。GAS（Apps Script）の反映用ツールと、自然言語検索の手元テストを管理する。",
   "scripts": {
     "gas:status": "cd GAS/04_閾値超過アラート && clasp status",
-    "gas:push": "cd GAS/04_閾値超過アラート && clasp push"
+    "gas:push": "cd GAS/04_閾値超過アラート && clasp push",
+    "nl:build": "node scripts/build_nl_catalog.js",
+    "test:nl": "npm run nl:build && node tests/nl_search/run_local.js",
+    "gas:status:nl": "npm run nl:build && cd gas/05_自然言語検索 && clasp status",
+    "gas:push:nl": "npm run test:nl && cd gas/05_自然言語検索 && clasp push --force"
   },
   "devDependencies": {
     "@google/clasp": "3.4.1"
