@@ -167,7 +167,8 @@ LIMIT 200;
 
 ## 公開
 
-- Web アプリの URL: `https://script.google.com/macros/s/AKfycbxcihM5ermgV7DDMj1bstb6U6NEXnaNwt69d1jnHn2ar1U8n4Y3J8IFIIJ-P-bDOid8gQ/exec`（デプロイ @1「初版（原価系7指標）」）
+- Web アプリの URL: `https://script.google.com/a/macros/field2board.com/s/AKfycbxcihM5ermgV7DDMj1bstb6U6NEXnaNwt69d1jnHn2ar1U8n4Y3J8IFIIJ-P-bDOid8gQ/exec`（デプロイ @1「初版（原価系7指標）」）
+  - 組織内限定のため、組織名（`/a/macros/field2board.com/`）入りの URL で案内する。組織名なしの URL や、ブラウザで複数の Google アカウントにログインしている状態では開けないことがある。
 - 所有者（msudo）として実行し、アクセスは組織内のアカウントに限る（`appsscript.json` の `webapp`）。
 - コードを直したら `npm run gas:push:nl` で反映し、同じ URL のまま新しい版にするには `gas/05_自然言語検索` で `clasp update-deployment AKfycbxcihM5ermgV7DDMj1bstb6U6NEXnaNwt69d1jnHn2ar1U8n4Y3J8IFIIJ-P-bDOid8gQ --description "<変更内容>"` を実行する。
 
