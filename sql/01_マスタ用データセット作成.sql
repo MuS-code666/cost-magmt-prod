@@ -1,4 +1,4 @@
-CREATE TABLE `cost-mgmt-prod-507701.master.products` (
+CREATE TABLE `{{PROJECT_ID}}.master.products` (
   product_code STRING NOT NULL,
   product_name STRING,
   customer_code STRING,
@@ -10,27 +10,27 @@ CREATE TABLE `cost-mgmt-prod-507701.master.products` (
   standard_load_rate NUMERIC
 );
 
-CREATE TABLE `cost-mgmt-prod-507701.master.customers` (
+CREATE TABLE `{{PROJECT_ID}}.master.customers` (
   customer_code STRING NOT NULL,
   customer_name STRING,
   sales_staff_code STRING
 );
 
-CREATE TABLE `cost-mgmt-prod-507701.master.materials` (
+CREATE TABLE `{{PROJECT_ID}}.master.materials` (
   material_code STRING NOT NULL,
   material_name STRING,
   unit_price NUMERIC,
   primary_vendor_code STRING
 );
 
-CREATE TABLE `cost-mgmt-prod-507701.master.factories` (
+CREATE TABLE `{{PROJECT_ID}}.master.factories` (
   factory_code STRING NOT NULL,
   factory_name STRING,
   annual_factory_rent NUMERIC
 );
 
 
-CREATE TABLE `cost-mgmt-prod-507701.master.machines` (
+CREATE TABLE `{{PROJECT_ID}}.master.machines` (
   machine_code STRING NOT NULL,
   machine_name STRING,
   factory_code STRING,
@@ -38,25 +38,25 @@ CREATE TABLE `cost-mgmt-prod-507701.master.machines` (
   annual_depreciation NUMERIC
 );
 
-CREATE TABLE `cost-mgmt-prod-507701.master.workers` (
+CREATE TABLE `{{PROJECT_ID}}.master.workers` (
   worker_code STRING NOT NULL,
   worker_name STRING,
   factory_code STRING,
   machine_code STRING
 );
 
-CREATE TABLE `cost-mgmt-prod-507701.master.sales_staff` (
+CREATE TABLE `{{PROJECT_ID}}.master.sales_staff` (
   sales_staff_code STRING NOT NULL,
   sales_staff_name STRING
 );
 
-CREATE TABLE `cost-mgmt-prod-507701.master.vendors` (
+CREATE TABLE `{{PROJECT_ID}}.master.vendors` (
   vendor_code STRING NOT NULL,
   vendor_name STRING,
   vendor_type STRING
 );
 
-CREATE TABLE `cost-mgmt-prod-507701.master.cost_accounts` (
+CREATE TABLE `{{PROJECT_ID}}.master.cost_accounts` (
   cost_account_code STRING NOT NULL,
   cost_account_name STRING,
   allocation_method STRING

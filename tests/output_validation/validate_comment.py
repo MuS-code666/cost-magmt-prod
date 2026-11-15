@@ -20,7 +20,9 @@ import tempfile
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
-PROJECT = "cost-mgmt-prod-507701"
+# GCP プロジェクトは config/env.json から読む（環境変数 COST_MGMT_ENV で別の設定ファイルも指定できる）
+_ENV_FILE = Path(__file__).resolve().parents[2] / os.environ.get("COST_MGMT_ENV", "config/env.json")
+PROJECT = json.loads(_ENV_FILE.read_text(encoding="utf-8"))["gcp"]["projectId"]
 MARKER = re.compile(r"\[\[([^|\]]*)\|([^|\]]*)\|([^|\]]*)\|([^\]]*)\]\]")
 IGNORED = [r"\d{4}年\d{1,2}月", r"P\d+", r"\d{6}", r"rank\s*\d+", r"順位\d+(?:〜\d+)?", r"顧客企業\d+"]
 NUMBER = re.compile(r"(?<![A-Za-z0-9_.])[+-]?\d+(?:\.\d+)?")

@@ -12,3 +12,6 @@ secrets/
 # Node.js / clasp
 node_modules/
 .clasprc.json
+
+# 環境ごとの生成物（npm run env:render で作る。BigQuery に貼る SQL など）
+build/

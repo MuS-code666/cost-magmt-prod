@@ -7,7 +7,7 @@
 
 ### 送信範囲
 
-- データソースは BigQuery `cost-mgmt-prod-507701.mart.v_variance` のみとする。`history.*` `master.*` の生テーブルへは直接アクセスしない。
+- データソースは BigQuery `{{PROJECT_ID}}.mart.v_variance`（プロジェクト ID は `config/env.json`）のみとする。`history.*` `master.*` の生テーブルへは直接アクセスしない。
 - 全件送信はしない。Claudeに送るのは以下の2種類に限定する。
   1. **ワーストN行**: 年月×部門（`factory_code`）内で `cost_budget_variance_rank <= 10`（部門ごと上位10件、Looker Studio P3と共通定義）に該当する行。`v_variance`の全列を対象とする（売上・利益系列を含む）。
   2. **部門集計値**: 年月×部門ごとの原価予算差異額合計・差異率（`cost_budget_variance_amount`のSUM、差異率は別途算出）。
@@ -44,7 +44,7 @@
   2. **指標カタログ**: `nl_search/catalog/metrics.json` の指標の定義・同義語・切り口・例の質問。数値は含まない。
 - **BigQueryのデータ行（金額・数量など）は送らない。** 値の正式名称への変換（辞書照合）、SQLの組み立て、集計はすべてGASとBigQueryで行い、結果はClaudeを経由せずに利用者の画面へ返す。
 - 利用者が質問文に個人名を入力するおそれがあるため、画面に「個人名を入力しないでください」と注記する。
-- クエリはWebアプリの所有者（msudo）の権限で実行し、Webアプリへのアクセスは組織内に限定する。利用者のメールアドレス・質問文・解釈結果は `explore.nl_search_log` に残す。
+- クエリはWebアプリの所有者（実行用アカウント）の権限で実行し、Webアプリへのアクセスは組織内に限定する。利用者のメールアドレス・質問文・解釈結果は `explore.nl_search_log` に残す。
 - 送信範囲を広げる場合（例: 結果の数値をClaudeに渡して解説させる）は、本ポリシーを改定してから実装する。
 
 ### 改訂履歴

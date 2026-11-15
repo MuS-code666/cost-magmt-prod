@@ -13,8 +13,9 @@
 // ============================================================
 
 const ALERT_CONFIG = {
-  PROJECT_ID: 'cost-mgmt-prod-507701',
-  LOCATION: 'asia-northeast1',
+  // 環境ごとの値は 環境設定_自動生成.gs（元は config/env.json）から読む
+  get PROJECT_ID() { return ENV.PROJECT_ID; },
+  get LOCATION() { return ENV.LOCATION; },
   VIEW: 'mart.v_variance',
   RANK_LIMIT: 10,
   MIN_VARIANCE_PCT: 30,

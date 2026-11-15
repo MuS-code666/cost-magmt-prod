@@ -12,7 +12,7 @@ const gasDir = path.join(root, 'gas', '05_自然言語検索');
 
 // GAS と同じく、全ファイルを1つのグローバルスコープで読み込む
 const context = vm.createContext({ console: console });
-const files = ['カタログ_自動生成.gs', '設定.gs', '条件の確定.gs', 'SQL.gs', '条件変換.gs', 'テスト.gs'];
+const files = ['環境設定_自動生成.gs', 'カタログ_自動生成.gs', '設定.gs', '条件の確定.gs', 'SQL.gs', '条件変換.gs', 'テスト.gs'];
 vm.runInContext(files.map((f) => fs.readFileSync(path.join(gasDir, f), 'utf8')).join('\n;\n') +
   '\n;globalThis.__nl = { NL_CATALOG, NL_TESTSET, nlResolve_, nlParsePeriod_, nlBuildQuery_, nlValidateCondition_, ' +
   'nlScoreCase_, nlScoreReport_, nlSystemPrompt_, nlOutputSchema_, nlResolveValue_, nlSqlForDisplay_ };', context);

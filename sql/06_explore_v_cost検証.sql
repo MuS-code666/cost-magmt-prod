@@ -27,7 +27,7 @@ v_cost_monthly AS (
     SUM(`原価予算`) AS budget_cost,
     SUM(`生産量kg`) AS production_qty_kg,
     SUM(`総原価`) - SUM(`原価予算`) AS budget_variance
-  FROM `cost-mgmt-prod-507701.explore.v_cost`
+  FROM `{{PROJECT_ID}}.explore.v_cost`
   WHERE `年月` BETWEEN '2024-04-01' AND '2027-03-01'
   GROUP BY 1
 ),
@@ -41,7 +41,7 @@ v_variance_monthly AS (
     SUM(budget_cost) AS budget_cost,
     SUM(production_qty_kg) AS production_qty_kg,
     SUM(cost_budget_variance_amount) AS budget_variance
-  FROM `cost-mgmt-prod-507701.mart.v_variance`
+  FROM `{{PROJECT_ID}}.mart.v_variance`
   WHERE target_month BETWEEN '2024-04-01' AND '2027-03-01'
   GROUP BY 1
 )
@@ -70,7 +70,7 @@ FULL OUTER JOIN v_variance_monthly b
 --      の値を記録する。
 -- ----------------------------------------------------------------
 SELECT `製品`, SUM(`総原価`) AS value
-FROM `cost-mgmt-prod-507701.explore.v_cost`
+FROM `{{PROJECT_ID}}.explore.v_cost`
 WHERE `年月` = '2026-09-01'
 GROUP BY `製品`;
 
@@ -81,5 +81,5 @@ GROUP BY `製品`;
 --      ほぼ同じ値なら剪定が効いておらず、全期間を毎回読んでいる。
 -- ----------------------------------------------------------------
 SELECT `製品`, SUM(`総原価`) AS value
-FROM `cost-mgmt-prod-507701.explore.v_cost`
+FROM `{{PROJECT_ID}}.explore.v_cost`
 GROUP BY `製品`;

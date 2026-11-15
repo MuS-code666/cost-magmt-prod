@@ -14,18 +14,18 @@
 -- ため、次回実行時に実データで上書きされる。
 -- ============================================================
 
-ALTER TABLE `cost-mgmt-prod-507701.master.materials`
+ALTER TABLE `{{PROJECT_ID}}.master.materials`
   ADD COLUMN IF NOT EXISTS primary_vendor_code STRING;
 
-ALTER TABLE `cost-mgmt-prod-507701.master.factories`
+ALTER TABLE `{{PROJECT_ID}}.master.factories`
   ADD COLUMN IF NOT EXISTS annual_factory_rent NUMERIC;
 
-ALTER TABLE `cost-mgmt-prod-507701.master.machines`
+ALTER TABLE `{{PROJECT_ID}}.master.machines`
   ADD COLUMN IF NOT EXISTS rated_power_kw NUMERIC,
   ADD COLUMN IF NOT EXISTS annual_depreciation NUMERIC;
 
-ALTER TABLE `cost-mgmt-prod-507701.master.workers`
+ALTER TABLE `{{PROJECT_ID}}.master.workers`
   ADD COLUMN IF NOT EXISTS machine_code STRING;
 
-ALTER TABLE `cost-mgmt-prod-507701.master.vendors`
+ALTER TABLE `{{PROJECT_ID}}.master.vendors`
   ADD COLUMN IF NOT EXISTS vendor_type STRING;

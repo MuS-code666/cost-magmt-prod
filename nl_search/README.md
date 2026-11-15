@@ -15,7 +15,7 @@
 | LLM に渡す指標 | 全件投入（指標 7 件。資料 07 の `mode: full`） |
 | カタログと辞書の置き場所 | リポジトリの JSON（`catalog/`）を正とし、GAS に同梱する。資料は Sheets / BigQuery を想定しているが、保守者が少ないうちは Git で履歴を持つほうが確実なため |
 | 会計年度 | 4月始まり。年度は開始年で呼ぶ（2026年度 = 2026-04〜2027-03） |
-| クエリの実行主体（資料 Q7） | Web アプリを「自分（msudo）として実行」し、アクセスは組織内に限定する。見せる範囲は全員同じ。ログに利用者のメールアドレスを残す |
+| クエリの実行主体（資料 Q7） | Web アプリを「自分（実行用アカウント）として実行」し、アクセスは組織内に限定する。見せる範囲は全員同じ。ログに利用者のメールアドレスを残す |
 | Claude への送信範囲 | 質問文とカタログ（指標の定義・同義語）だけ。BigQuery のデータ行は送らない（`requirements.md` の「自然言語検索」節） |
 
 ## 構成
@@ -112,7 +112,7 @@
 
 ```sql
 SELECT `製品`, SUM(`総原価`) AS value
-FROM `cost-mgmt-prod-507701.explore.v_cost`
+FROM `{{PROJECT_ID}}.explore.v_cost`   -- {{PROJECT_ID}} は config/env.json の gcp.projectId
 WHERE `年月` BETWEEN @start AND @end
   AND `工場` = @factory
 GROUP BY `製品`
@@ -167,10 +167,10 @@ LIMIT 200;
 
 ## 公開
 
-- Web アプリの URL: `https://script.google.com/a/macros/field2board.com/s/AKfycbxcihM5ermgV7DDMj1bstb6U6NEXnaNwt69d1jnHn2ar1U8n4Y3J8IFIIJ-P-bDOid8gQ/exec`（デプロイ @1「初版（原価系7指標）」）
-  - 組織内限定のため、組織名（`/a/macros/field2board.com/`）入りの URL で案内する。組織名なしの URL や、ブラウザで複数の Google アカウントにログインしている状態では開けないことがある。
-- 所有者（msudo）として実行し、アクセスは組織内のアカウントに限る（`appsscript.json` の `webapp`）。
-- コードを直したら `npm run gas:push:nl` で反映し、同じ URL のまま新しい版にするには `gas/05_自然言語検索` で `clasp update-deployment AKfycbxcihM5ermgV7DDMj1bstb6U6NEXnaNwt69d1jnHn2ar1U8n4Y3J8IFIIJ-P-bDOid8gQ --description "<変更内容>"` を実行する。
+- Web アプリの URL は `config/env.json` の `gas.nlSearch.webAppUrl` に記録する（自社デモ環境はデプロイ @1「初版（原価系7指標）」）。
+  - 組織内限定のため、組織名（`/a/macros/<ドメイン>/`）入りの URL で案内する。組織名なしの URL や、ブラウザで複数の Google アカウントにログインしている状態では開けないことがある。
+- 所有者（実行用アカウント）として実行し、アクセスは組織内のアカウントに限る（`appsscript.json` の `webapp`）。
+- コードを直したら `npm run gas:push:nl` で反映し、同じ URL のまま新しい版にするには `gas/05_自然言語検索` で `clasp update-deployment <デプロイID> --description "<変更内容>"` を実行する。デプロイ ID は URL の `/s/` と `/exec` の間の文字列。
 
 ## STEP 5 実装メモ
 
