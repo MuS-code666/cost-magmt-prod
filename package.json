@@ -4,6 +4,7 @@
   "description": "原価管理App。GAS（Apps Script）の反映用ツールと、自然言語検索の手元テストを管理する。",
   "scripts": {
     "env:render": "node scripts/render_env.js",
+    "setup": "node scripts/setup_env.js",
     "gas:status:upload": "npm run env:render && cd gas/01_ファイル登録 && clasp status",
     "gas:push:upload": "npm run env:render && cd gas/01_ファイル登録 && clasp push --force",
     "gas:status:import": "npm run env:render && cd gas/02-03_取込・整形App && clasp status",

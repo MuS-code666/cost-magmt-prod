@@ -18,7 +18,9 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const DEFAULT_ENV = 'config/env.json';
 
-function loadEnv(envPath) {
+// options.allowUnfilled: true なら未記入があっても止めず、unfilled に一覧を返す（setup_env.js の確認用）
+function loadEnv(envPath, options) {
+  const opts = options || {};
   const file = path.resolve(root, envPath || process.env.COST_MGMT_ENV || DEFAULT_ENV);
   if (!fs.existsSync(file)) {
     throw new Error(file + ' がありません。config/env.example.json をコピーして値を入れてください。');
@@ -32,13 +34,13 @@ function loadEnv(envPath) {
       unfilled.push(keyPath.join('.'));
     }
   })(env, []);
-  if (unfilled.length) {
+  if (unfilled.length && !opts.allowUnfilled) {
     throw new Error(path.relative(root, file) + ' に未記入の値があります: ' + unfilled.join(', '));
   }
-  if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(env.gcp.projectId)) {
+  if (!unfilled.includes('gcp.projectId') && !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(env.gcp.projectId)) {
     throw new Error('gcp.projectId の形式が正しくありません: ' + env.gcp.projectId);
   }
-  return { env, file };
+  return { env, file, unfilled };
 }
 
 // sql/・prompts/・カタログで使う置き換え記号
@@ -72,8 +74,10 @@ function gasEnvFile(env, values) {
 function write(rel, content, written) {
   const out = path.join(root, rel);
   fs.mkdirSync(path.dirname(out), { recursive: true });
-  fs.writeFileSync(out, content, 'utf8');
-  written.push(rel);
+  // 中身が同じなら書かない（Windows では Git が改行を CRLF にするため、書き直すと「変更あり」に見える）
+  const same = fs.existsSync(out) && fs.readFileSync(out, 'utf8').replace(/\r\n/g, '\n') === content;
+  if (!same) fs.writeFileSync(out, content, 'utf8');
+  written.push(rel + (same ? '（変更なし）' : ''));
 }
 
 function renderAll(envPath) {
@@ -110,7 +114,8 @@ function renderAll(envPath) {
   const clasp = (scriptId) => JSON.stringify({ scriptId: scriptId, fileExtension: 'gs' }, null, 2) + '\n';
   Object.keys(gasProjects).forEach((dir) => {
     write(dir + '/環境設定_自動生成.gs', gasEnvFile(env, gasProjects[dir].env), written);
-    write(dir + '/.clasp.json', clasp(gasProjects[dir].scriptId), written);
+    // scriptId が空 = Apps Script のプロジェクトがまだ無い（npm run setup -- gas で作る）
+    if (gasProjects[dir].scriptId) write(dir + '/.clasp.json', clasp(gasProjects[dir].scriptId), written);
   });
 
   const mcp = {
@@ -118,10 +123,11 @@ function renderAll(envPath) {
       bigquery: {
         command: 'npx',
         args: ['-y', '@toolbox-sdk/server', '--prebuilt', 'bigquery', '--stdio'],
-        env: {
-          GOOGLE_APPLICATION_CREDENTIALS: env.mcp.bigqueryCredentialsPath,
-          BIGQUERY_PROJECT: env.gcp.projectId
-        }
+        // 認証ファイルのパスが空なら、鍵を使わない方式（gcloud の ADC。読み取り専用 SA のなりすまし）で接続する
+        env: Object.assign(
+          env.mcp.bigqueryCredentialsPath ? { GOOGLE_APPLICATION_CREDENTIALS: env.mcp.bigqueryCredentialsPath } : {},
+          { BIGQUERY_PROJECT: env.gcp.projectId }
+        )
       }
     }
   };
@@ -139,7 +145,7 @@ function renderAll(envPath) {
   return { env, file, written };
 }
 
-module.exports = { loadEnv, renderText };
+module.exports = { loadEnv, renderText, renderAll };
 
 if (require.main === module) {
   try {
