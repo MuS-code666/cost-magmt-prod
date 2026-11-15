@@ -2,7 +2,13 @@
   "mcpServers": {
     "bigquery": {
       "command": "npx",
-      "args": ["-y", "@toolbox-sdk/server", "--prebuilt", "bigquery", "--stdio"],
+      "args": [
+        "-y",
+        "@toolbox-sdk/server",
+        "--prebuilt",
+        "bigquery",
+        "--stdio"
+      ],
       "env": {
         "GOOGLE_APPLICATION_CREDENTIALS": "C:\\Users\\msudo\\secrets\\cost-mgmt-prod\\phase5-bq-readonly-key.json",
         "BIGQUERY_PROJECT": "cost-mgmt-prod-507701"

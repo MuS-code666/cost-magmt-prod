@@ -1,6 +1,6 @@
 // ============================================================
 // 自動生成ファイル。手で編集しない。
-// 元データ: nl_search/catalog/metrics.json, nl_search/catalog/aliases.json, tests/nl_search/testset.json
+// 元データ: nl_search/catalog/metrics.json, nl_search/catalog/aliases.json, tests/nl_search/testset.json, config/env.json
 // 再生成: リポジトリ直下で npm run nl:build
 // ============================================================
 

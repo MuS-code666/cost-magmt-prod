@@ -4,6 +4,8 @@ Apps Script のコードをこのリポジトリで編集し、コマンドで A
 
 現在 clasp で反映できるのは `04_閾値超過アラート` と `05_自然言語検索`（`01`〜`03` は従来どおり）。
 
+プロジェクト ID やスプレッドシート ID などの環境ごとの値は、コードに直接書かず `config/env.json` に書く。各フォルダの `環境設定_自動生成.gs`（`const ENV`）と `.clasp.json` は、そこから `npm run env:render` で作る（手で編集しない）。`01`〜`03` はエディタで直接管理しているため、値を変えたら `環境設定_自動生成.gs` の中身をエディタの同名ファイルに貼り付ける。
+
 ## 05_自然言語検索 の反映
 
 - カタログ・辞書・テストセットの正は `nl_search/catalog/*.json` と `tests/nl_search/testset.json`。`カタログ_自動生成.gs` は手で編集しない。
@@ -31,8 +33,8 @@ Apps Script のコードをこのリポジトリで編集し、コマンドで A
 - **push は Apps Script 側のファイルを、手元のファイルで丸ごと置き換える。** Apps Script のエディタで直接編集した内容は、次の push で消える。エディタで直接直した場合は、先に `cd GAS/04_閾値超過アラート && npx clasp pull` で手元に取り込み、内容を確認してからコミットする。
 - トリガーとスクリプトプロパティ（Webhook URL）は push しても変わらない。
 - `npm run gas:*` は `GAS/04_閾値超過アラート/` に移動して clasp を実行する。フォルダを移動せずに `clasp push --project …` と指定すると、clasp のパス検査に弾かれる。
-- `.clasp.json` の `scriptId` は場所を示す番号で、認証情報ではないためコミットしてよい。`rootDir` は書かない。
+- `.clasp.json` の `scriptId` は場所を示す番号で、認証情報ではないためコミットしてよい。`.clasp.json` は `config/env.json` の `gas.*.scriptId` から自動生成する。`rootDir` は書かない。
 
 ## 別の GAS プロジェクトも反映したい場合
 
-そのフォルダに `.clasp.json`（`scriptId` と `"fileExtension": "gs"`）を置き、`package.json` の `scripts` に `gas:push` と同じ形の行を追加する。Apps Script のスクリプト ID は、プロジェクトの設定の「ID」で確認できる。push は `appsscript.json` も置き換えるため、フォルダ内の `appsscript.json` が Apps Script 側の最新と同じか、先に `clasp pull` で確認する。
+`config/env.json` にスクリプト ID を追加し、`scripts/render_env.js` でそのフォルダの `.clasp.json`（`scriptId` と `"fileExtension": "gs"`）を作るようにしたうえで、`package.json` の `scripts` に `gas:push` と同じ形の行を追加する。Apps Script のスクリプト ID は、プロジェクトの設定の「ID」で確認できる。push は `appsscript.json` も置き換えるため、フォルダ内の `appsscript.json` が Apps Script 側の最新と同じか、先に `clasp pull` で確認する。

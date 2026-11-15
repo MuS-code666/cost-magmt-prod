@@ -20,14 +20,14 @@
 --      maximumBytesBilled で上限を掛ける。
 -- ================================================================
 
-CREATE SCHEMA IF NOT EXISTS `cost-mgmt-prod-507701.explore`
+CREATE SCHEMA IF NOT EXISTS `{{PROJECT_ID}}.explore`
 OPTIONS (
-  location = 'asia-northeast1',
+  location = '{{LOCATION}}',
   description = '自然言語検索用の意味層。利用者向けのビューと検索ログだけを置く'
 );
 
 
-CREATE OR REPLACE VIEW `cost-mgmt-prod-507701.explore.v_cost`
+CREATE OR REPLACE VIEW `{{PROJECT_ID}}.explore.v_cost`
 (
   `年月` OPTIONS(description = '月初日。月次集計の基準日。期間は必ずこの列で絞る'),
   `工場` OPTIONS(description = '製品の製造工場名。社内では「部門」とも呼ぶ（原価データの部門CD = 工場CD）'),
@@ -59,7 +59,7 @@ SELECT
   total_cost,
   budget_cost,
   production_qty_kg
-FROM `cost-mgmt-prod-507701.mart.v_variance`;
+FROM `{{PROJECT_ID}}.mart.v_variance`;
 
 
 -- ================================================================
@@ -68,7 +68,7 @@ FROM `cost-mgmt-prod-507701.mart.v_variance`;
 --   週次の辞書見直し（nl_search/README.md の「運用」）の材料にする。
 -- ================================================================
 
-CREATE TABLE IF NOT EXISTS `cost-mgmt-prod-507701.explore.nl_search_log` (
+CREATE TABLE IF NOT EXISTS `{{PROJECT_ID}}.explore.nl_search_log` (
   logged_at TIMESTAMP NOT NULL,
   request_id STRING NOT NULL,
   stage STRING NOT NULL,          -- 'interpret'（候補提示）| 'execute'（実行）

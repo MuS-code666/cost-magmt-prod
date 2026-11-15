@@ -12,8 +12,9 @@
 // ============================================================
 
 const NL_CONFIG = {
-  PROJECT_ID: 'cost-mgmt-prod-507701',
-  LOCATION: 'asia-northeast1',
+  // 環境ごとの値は 環境設定_自動生成.gs（元は config/env.json）から読む
+  get PROJECT_ID() { return ENV.PROJECT_ID; },
+  get LOCATION() { return ENV.LOCATION; },
   LOG_TABLE: { datasetId: 'explore', tableId: 'nl_search_log' },
 
   CLAUDE_URL: 'https://api.anthropic.com/v1/messages',

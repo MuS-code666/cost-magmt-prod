@@ -5,8 +5,12 @@
 const fs = require('fs');
 const path = require('path');
 
+const { loadEnv, renderText } = require('./render_env');
+
 const root = path.join(__dirname, '..');
-const read = (p) => JSON.parse(fs.readFileSync(path.join(root, p), 'utf8'));
+const { env } = loadEnv();
+// カタログの {{PROJECT_ID}} は config/env.json の値に置き換えて同梱する
+const read = (p) => JSON.parse(renderText(fs.readFileSync(path.join(root, p), 'utf8'), env));
 
 const sources = [
   ['NL_CATALOG', 'nl_search/catalog/metrics.json'],
@@ -17,7 +21,7 @@ const sources = [
 const lines = [
   '// ============================================================',
   '// 自動生成ファイル。手で編集しない。',
-  '// 元データ: ' + sources.map((s) => s[1]).join(', '),
+  '// 元データ: ' + sources.map((s) => s[1]).join(', ') + ', config/env.json',
   '// 再生成: リポジトリ直下で npm run nl:build',
   '// ============================================================',
   ''

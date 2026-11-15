@@ -41,7 +41,7 @@ SELECT
   ROUND(prior_year_total_cost / 10000, 1) AS prior_year_cost_man,
   ROUND(cost_yoy_amount / 10000, 1) AS cost_yoy_man,
   ROUND(cost_yoy_rate * 100, 1) AS cost_yoy_pct
-FROM `cost-mgmt-prod-507701.mart.v_variance`
+FROM `{{PROJECT_ID}}.mart.v_variance`
 WHERE target_month = DATE '{{TARGET_MONTH}}'
   AND cost_budget_variance_rank <= 10
 ORDER BY factory_code, cost_budget_variance_rank
@@ -60,7 +60,7 @@ SELECT
   ROUND(SUM(budget_cost) / 10000, 1) AS budget_cost_man,
   ROUND(SUM(cost_budget_variance_amount) / 10000, 1) AS variance_man,
   ROUND(SAFE_DIVIDE(SUM(cost_budget_variance_amount), NULLIF(SUM(budget_cost), 0)) * 100, 1) AS variance_pct
-FROM `cost-mgmt-prod-507701.mart.v_variance`
+FROM `{{PROJECT_ID}}.mart.v_variance`
 WHERE target_month = DATE '{{TARGET_MONTH}}'
 GROUP BY factory_code, factory_name
 ORDER BY factory_code

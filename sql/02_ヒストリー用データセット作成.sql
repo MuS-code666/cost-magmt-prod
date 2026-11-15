@@ -1,4 +1,4 @@
-CREATE TABLE `cost-mgmt-prod-507701.history.sales` (
+CREATE TABLE `{{PROJECT_ID}}.history.sales` (
 transaction_id STRING NOT NULL,
 sales_date DATE NOT NULL,
 target_month DATE NOT NULL,
@@ -15,7 +15,7 @@ PARTITION BY DATE_TRUNC(target_month, MONTH)
 CLUSTER BY product_code, customer_code;
 
 
-CREATE TABLE `cost-mgmt-prod-507701.history.production` (
+CREATE TABLE `{{PROJECT_ID}}.history.production` (
 production_date DATE NOT NULL,
 target_month DATE NOT NULL,
 lot_no STRING NOT NULL,
@@ -36,7 +36,7 @@ PARTITION BY DATE_TRUNC(target_month, MONTH)
 CLUSTER BY factory_code, machine_code, product_code;
 
 
-CREATE TABLE `cost-mgmt-prod-507701.history.costs` (
+CREATE TABLE `{{PROJECT_ID}}.history.costs` (
 cost_id STRING NOT NULL,
 posting_date DATE NOT NULL,
 target_month DATE NOT NULL,
@@ -56,7 +56,7 @@ PARTITION BY DATE_TRUNC(target_month, MONTH)
 CLUSTER BY cost_account_code, factory_code, machine_code;
 
 
-CREATE TABLE `cost-mgmt-prod-507701.history.monthly_reports` (
+CREATE TABLE `{{PROJECT_ID}}.history.monthly_reports` (
 target_month DATE NOT NULL,
 factory_code STRING,
 category STRING,
@@ -68,7 +68,7 @@ PARTITION BY DATE_TRUNC(target_month, MONTH)
 CLUSTER BY factory_code;
 
 
-CREATE TABLE `cost-mgmt-prod-507701.history.sales_budgets` (
+CREATE TABLE `{{PROJECT_ID}}.history.sales_budgets` (
 target_month DATE NOT NULL,
 cost_account_code STRING,
 customer_code STRING NOT NULL,
@@ -80,7 +80,7 @@ PARTITION BY DATE_TRUNC(target_month, MONTH)
 CLUSTER BY customer_code;
 
 
-CREATE TABLE `cost-mgmt-prod-507701.history.cost_budgets` (
+CREATE TABLE `{{PROJECT_ID}}.history.cost_budgets` (
 target_month DATE NOT NULL,
 cost_account_code STRING NOT NULL,
 factory_code STRING NOT NULL,

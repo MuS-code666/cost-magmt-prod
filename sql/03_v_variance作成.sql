@@ -66,7 +66,7 @@
 --        切り替える想定（Looker Studio側の設定変更は別途実施）。
 -- ================================================================
 
-CREATE OR REPLACE VIEW `cost-mgmt-prod-507701.mart.v_variance` AS
+CREATE OR REPLACE VIEW `{{PROJECT_ID}}.mart.v_variance` AS
 
 WITH
 
@@ -92,9 +92,9 @@ production_base AS (
 
     m.standard_productivity_kg_h
 
-  FROM `cost-mgmt-prod-507701.history.production` pr
+  FROM `{{PROJECT_ID}}.history.production` pr
 
-  LEFT JOIN `cost-mgmt-prod-507701.master.products` m
+  LEFT JOIN `{{PROJECT_ID}}.master.products` m
     ON pr.product_code = m.product_code
 ),
 
@@ -224,9 +224,9 @@ costs_base AS (
     c.amount,
     ca.allocation_method
 
-  FROM `cost-mgmt-prod-507701.history.costs` c
+  FROM `{{PROJECT_ID}}.history.costs` c
 
-  INNER JOIN `cost-mgmt-prod-507701.master.cost_accounts` ca
+  INNER JOIN `{{PROJECT_ID}}.master.cost_accounts` ca
     ON c.cost_account_code = ca.cost_account_code
 
   WHERE
@@ -397,7 +397,7 @@ cost_budget_by_machine AS (
 
     SUM(budget_amount) AS budget_cost
 
-  FROM `cost-mgmt-prod-507701.history.cost_budgets`
+  FROM `{{PROJECT_ID}}.history.cost_budgets`
 
   GROUP BY
     target_month,
@@ -456,7 +456,7 @@ sales_base AS (
     quantity_kg,
     sales_amount
 
-  FROM `cost-mgmt-prod-507701.history.sales`
+  FROM `{{PROJECT_ID}}.history.sales`
 ),
 
 sales_by_product AS (
@@ -490,7 +490,7 @@ sales_budget AS (
 
     SUM(budget_amount) AS budget_sales_amount
 
-  FROM `cost-mgmt-prod-507701.history.sales_budgets`
+  FROM `{{PROJECT_ID}}.history.sales_budgets`
 
   GROUP BY
     target_month,
@@ -798,13 +798,13 @@ result AS (
 
 FROM base
 
-LEFT JOIN `cost-mgmt-prod-507701.master.products` mp
+LEFT JOIN `{{PROJECT_ID}}.master.products` mp
   ON base.product_code = mp.product_code
 
-LEFT JOIN `cost-mgmt-prod-507701.master.customers` c
+LEFT JOIN `{{PROJECT_ID}}.master.customers` c
   ON mp.customer_code = c.customer_code
 
-LEFT JOIN `cost-mgmt-prod-507701.master.factories` f
+LEFT JOIN `{{PROJECT_ID}}.master.factories` f
   ON mp.factory_code = f.factory_code
 
 LEFT JOIN sales_budget sb
@@ -849,7 +849,7 @@ FROM result;
 -- ものであり、定期的に内容を確認することを推奨する。
 -- ================================================================
 
-CREATE OR REPLACE VIEW `cost-mgmt-prod-507701.mart.v_data_quality_orphans` AS
+CREATE OR REPLACE VIEW `{{PROJECT_ID}}.mart.v_data_quality_orphans` AS
 
 SELECT
   'PRODUCTION_PRODUCT_NOT_IN_MASTER' AS issue_type,
@@ -858,9 +858,9 @@ SELECT
   CAST(NULL AS STRING) AS lot_no,
   COUNT(*) AS row_count
 
-FROM `cost-mgmt-prod-507701.history.production` pr
+FROM `{{PROJECT_ID}}.history.production` pr
 
-LEFT JOIN `cost-mgmt-prod-507701.master.products` p
+LEFT JOIN `{{PROJECT_ID}}.master.products` p
   ON pr.product_code = p.product_code
 
 WHERE
@@ -879,12 +879,12 @@ SELECT
   c.lot_no,
   COUNT(*) AS row_count
 
-FROM `cost-mgmt-prod-507701.history.costs` c
+FROM `{{PROJECT_ID}}.history.costs` c
 
-INNER JOIN `cost-mgmt-prod-507701.master.cost_accounts` ca
+INNER JOIN `{{PROJECT_ID}}.master.cost_accounts` ca
   ON c.cost_account_code = ca.cost_account_code
 
-LEFT JOIN `cost-mgmt-prod-507701.history.production` pr
+LEFT JOIN `{{PROJECT_ID}}.history.production` pr
   ON c.lot_no = pr.lot_no
 
 WHERE

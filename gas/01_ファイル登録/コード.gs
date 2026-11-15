@@ -18,7 +18,8 @@
 const CONFIG = {
   TIMEZONE: 'Asia/Tokyo',
 
-  SOURCE_CONFIG_SPREADSHEET_ID: '1mjxPFb9GcbaG780duU6xfTqX0bo3nse4_8S87w8WFOE',
+  // 環境ごとの値は 環境設定_自動生成.gs（元は config/env.json）から読む
+  get SOURCE_CONFIG_SPREADSHEET_ID() { return ENV.SOURCE_CONFIG_SPREADSHEET_ID; },
   SOURCE_CONFIG_SHEET_NAME: 'アップロード設定',
 
   GOOGLE_SHEET_MIME:

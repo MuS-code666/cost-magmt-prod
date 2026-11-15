@@ -1,6 +1,6 @@
 {
   "version": "2026-10-25",
-  "view": "cost-mgmt-prod-507701.explore.v_cost",
+  "view": "{{PROJECT_ID}}.explore.v_cost",
   "period_column": "年月",
   "unit_note": "金額はすべて円。v_cost の列説明（BigQuery の OPTIONS）が列の定義の正",
 
