@@ -2,7 +2,15 @@
 
 Apps Script のコードをこのリポジトリで編集し、コマンドで Apps Script に反映する。変更履歴は Git に残る。
 
-現在 clasp で反映できるのは `04_閾値超過アラート` のみ（`01`〜`03` は従来どおり）。
+現在 clasp で反映できるのは `04_閾値超過アラート` と `05_自然言語検索`（`01`〜`03` は従来どおり）。
+
+## 05_自然言語検索 の反映
+
+- カタログ・辞書・テストセットの正は `nl_search/catalog/*.json` と `tests/nl_search/testset.json`。`カタログ_自動生成.gs` は手で編集しない。
+- `npm run test:nl` で `カタログ_自動生成.gs` を作り直し、Claude・BigQuery を使わない部分（辞書・期間・検証・SQL の組み立て）を手元で検証する。
+- `npm run gas:push:nl` は、上のテストに合格したときだけ Apps Script に反映する。
+- Web アプリの公開範囲は `appsscript.json` の `webapp`（所有者として実行・組織内のみ）。コードを反映しても、公開中の Web アプリは「デプロイを管理」で新しいバージョンにするまで変わらない。
+- スクリプトプロパティ `ANTHROPIC_API_KEY`（必須）と `CLAUDE_MODEL`（任意）は push しても変わらない。
 
 ## 初回のみの準備
 

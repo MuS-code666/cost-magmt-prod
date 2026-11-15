@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --ink: #1b2a41; --ink-soft: #4a5a70; --ink-faint: #6b7a90; --line: #dfe4ec;
+    --accent: #2e6bd6; --accent-soft: #eaf1fc; --warn-bg: #fdf3e3; --warn-line: #e4c27a; --warn-ink: #8a5f12;
+    --bad: #b3402f; --bad-bg: #fbeae6; --good: #2f7d55; --code-bg: #eff2f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12181f; --surface: #1a222c; --ink: #e4eaf2; --ink-soft: #a9b6c7; --ink-faint: #8794a9; --line: #2d3948;
+      --accent: #6c9ce8; --accent-soft: #1f2c40; --warn-bg: #2e2718; --warn-line: #7a6230; --warn-ink: #e0b96a;
+      --bad: #e8806f; --bad-bg: #37201c; --good: #6fbf95; --code-bg: #232d39;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.7 "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .lede { color: var(--ink-soft); margin: 0 0 16px; font-size: 13px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-top: 16px; }
+  form.ask { display: flex; gap: 8px; }
+  form.ask input { flex: 1; min-width: 0; font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+  button { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 6px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; padding: 10px 18px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.link { border: none; background: none; color: var(--accent); padding: 0 4px; }
+  .examples { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+  .examples button { font-size: 13px; padding: 2px 10px; border-radius: 999px; }
+  .note { font-size: 12px; color: var(--ink-faint); margin-top: 6px; }
+  .status { margin-top: 16px; color: var(--ink-soft); }
+  .error { background: var(--bad-bg); color: var(--bad); border-radius: 8px; padding: 10px 12px; margin-top: 16px; white-space: pre-wrap; }
+  .cond { display: grid; grid-template-columns: 6em 1fr; gap: 12px 12px; align-items: start; }
+  .cond > .k { color: var(--ink-faint); font-size: 13px; padding-top: 6px; }
+  .cond select, .cond input { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+  .chip { display: inline-flex; align-items: center; gap: 4px; background: var(--accent-soft); border-radius: 999px; padding: 2px 4px 2px 12px; margin: 0 6px 6px 0; }
+  .chip.default { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+  .choice { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
+  .choice .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .from { color: var(--ink-faint); font-size: 12px; }
+  .defaultnote { margin-top: 6px; font-size: 13px; color: var(--warn-ink); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .notes { margin: 12px 0 0; padding-left: 1.2em; font-size: 13px; color: var(--ink-soft); }
+  .actions { margin-top: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .summary { font-weight: bold; margin-bottom: 8px; }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th { font-size: 12px; color: var(--ink-faint); font-weight: normal; }
+  td.num, th.num { text-align: right; }
+  .neg { color: var(--good); } .pos { color: var(--bad); }
+  pre { background: var(--code-bg); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
+  @media (max-width: 560px) { .cond { grid-template-columns: 1fr; gap: 4px; } .cond > .k { padding-top: 10px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>原価 自然言語検索</h1>
+  <p class="lede">質問を入力すると、検索条件の候補を表示します。条件を確認・修正してから実行してください。</p>
+
+  <div class="card">
+    <form class="ask" id="ask">
+      <input id="question" maxlength="300" placeholder="例: 先月の第二工場の原価を製品別に前年と比べて" autocomplete="off">
+      <button class="primary" id="askBtn" type="submit">条件を表示</button>
+    </form>
+    <div class="examples" id="examples"></div>
+    <div class="note">個人名は入力しないでください。質問文は検索条件への変換のため Claude（Anthropic）に送信されます。集計データは送信されません。</div>
+  </div>
+
+  <div id="status" class="status"></div>
+  <div id="conditions"></div>
+  <div id="result"></div>
+</main>
+
+<script>
+  var OPTIONS = null;
+  var INTERP = null;   // 段階1の結果
+  var STATE = null;    // 画面で編集中の条件
+
+  function el(tag, attrs, children) {
+    var e = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function(k) {
+      if (k === 'text') e.textContent = attrs[k];
+      else if (k === 'onclick' || k === 'onchange' || k === 'oninput') e[k] = attrs[k];
+      else if (attrs[k] !== false && attrs[k] !== null && attrs[k] !== undefined) e.setAttribute(k, attrs[k] === true ? '' : attrs[k]);
+    });
+    (children || []).forEach(function(c) { if (c) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return e;
+  }
+  function clear(id) { var n = document.getElementById(id); n.innerHTML = ''; return n; }
+  function setStatus(text) { document.getElementById('status').textContent = text || ''; }
+  function showError(where, message) { clear(where).appendChild(el('div', { 'class': 'error', text: message })); }
+  function metricOf(id) { return OPTIONS.metrics.filter(function(m) { return m.id === id; })[0]; }
+  function dimLabel(dim) { return OPTIONS.dimensions.filter(function(d) { return d.dim === dim; })[0].label; }
+  function compareLabel(c) { var x = OPTIONS.compares.filter(function(o) { return o.compare === c; })[0]; return x ? x.label : 'なし'; }
+  function ym(dateText) { return dateText ? dateText.slice(0, 7) : ''; }
+  function fmtBytes(b) { return b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB'; }
+
+  google.script.run.withSuccessHandler(function(o) {
+    OPTIONS = o;
+    var box = clear('examples');
+    o.examples.forEach(function(q) { box.appendChild(el('button', { type: 'button', text: q, onclick: function() { ask(q); } })); });
+  }).withFailureHandler(function(e) { showError('status', '初期化に失敗しました: ' + e.message); }).nlGetOptions();
+
+  document.getElementById('ask').addEventListener('submit', function(ev) {
+    ev.preventDefault();
+    ask(document.getElementById('question').value);
+  });
+
+  // ---------------- 段階1: 解釈 ----------------
+  function ask(q) {
+    if (!OPTIONS) return;
+    document.getElementById('question').value = q;
+    clear('conditions'); clear('result');
+    document.getElementById('askBtn').disabled = true;
+    setStatus('質問を検索条件に変換しています…');
+    google.script.run.withSuccessHandler(function(r) {
+      document.getElementById('askBtn').disabled = false;
+      setStatus('');
+      renderInterpretation(r);
+    }).withFailureHandler(function(e) {
+      document.getElementById('askBtn').disabled = false;
+      setStatus('');
+      showError('conditions', e.message);
+    }).nlInterpret(q);
+  }
+
+  function renderInterpretation(r) {
+    INTERP = r;
+    if (r.status === 'error') return showError('conditions', r.message);
+    if (r.status === 'unsupported') {
+      var card = el('div', { 'class': 'card' }, [el('div', { text: r.unsupported.message })]);
+      if (r.unsupported.suggest.length) {
+        var btns = el('div', { 'class': 'examples' });
+        r.unsupported.suggest.forEach(function(q) { btns.appendChild(el('button', { type: 'button', text: q, onclick: function() { ask(q); } })); });
+        card.appendChild(btns);
+      }
+      return clear('conditions').appendChild(card);
+    }
+    var c = r.condition;
+    STATE = {
+      metric: c.metric,
+      originalMetric: c.metric,
+      start: ym(r.period.start), end: ym(r.period.end), periodToken: c.period,
+      origStart: ym(r.period.start), origEnd: ym(r.period.end),
+      filters: r.filter_chips.map(function(ch) {
+        return { dim: ch.dim, text: ch.text, value: ch.value, via: ch.via, candidates: ch.candidates, picked: false };
+      }),
+      group_by: c.group_by.slice(),
+      compare: c.compare,
+      ranking: !!c.order,
+      order: c.order || { by: 'value', dir: 'desc' },
+      limit: c.limit || 10,
+      edited: false
+    };
+    renderConditions();
+  }
+
+  function renderConditions() {
+    var r = INTERP, s = STATE;
+    var grid = el('div', { 'class': 'cond' });
+    var touch = function() { s.edited = true; renderConditions(); };
+
+    // 指標
+    var sel = el('select', { onchange: function(e) { s.metric = e.target.value; touch(); } });
+    OPTIONS.metrics.forEach(function(m) { sel.appendChild(el('option', { value: m.id, selected: m.id === s.metric, text: m.label })); });
+    var metricCell = el('div', {}, [sel, el('div', { 'class': 'note', text: metricOf(s.metric).description })]);
+    if (r.defaults_used.length && s.metric === s.originalMetric) {
+      r.defaults_used.forEach(function(d) {
+        var line = el('div', { 'class': 'defaultnote', text: '「' + d.term + '」を「' + metricOf(s.metric).label + '」として解釈しました（既定）。' });
+        d.alternatives.forEach(function(id) {
+          line.appendChild(el('button', { type: 'button', 'class': 'link', text: metricOf(id).label + 'に切り替え', onclick: function() { s.metric = id; touch(); } }));
+        });
+        metricCell.appendChild(line);
+      });
+    }
+    grid.appendChild(el('div', { 'class': 'k', text: '指標' })); grid.appendChild(metricCell);
+
+    // 期間
+    var start = el('input', { type: 'month', value: s.start, onchange: function(e) { s.start = e.target.value; touch(); } });
+    var end = el('input', { type: 'month', value: s.end, onchange: function(e) { s.end = e.target.value; touch(); } });
+    var periodCell = el('div', {}, [el('div', { 'class': 'row' }, [start, '〜', end])]);
+    if (s.start === s.origStart && s.end === s.origEnd) periodCell.appendChild(el('div', { 'class': 'note', text: r.period.label + (r.period_defaulted ? '（期間がないため先月）' : '') }));
+    grid.appendChild(el('div', { 'class': 'k', text: '期間' })); grid.appendChild(periodCell);
+
+    // 絞り込み
+    var fcell = el('div', {});
+    s.filters.forEach(function(f, i) {
+      if (f.value) {
+        var chip = el('span', { 'class': 'chip' }, [dimLabel(f.dim) + ': ' + f.value]);
+        if (f.via && f.via !== 'exact') chip.appendChild(el('span', { 'class': 'from', text: '（「' + f.text + '」から）' }));
+        chip.appendChild(el('button', { type: 'button', 'class': 'link', 'aria-label': '絞り込みを外す', text: '×', onclick: function() { s.filters.splice(i, 1); touch(); } }));
+        fcell.appendChild(chip);
+      } else {
+        var box = el('div', { 'class': 'choice', text: '「' + f.text + '」に当たる' + dimLabel(f.dim) + 'が見つかりません。' + (f.candidates.length ? '近い候補から選んでください。' : '') });
+        var btns = el('div', { 'class': 'btns' });
+        f.candidates.forEach(function(v) { btns.appendChild(el('button', { type: 'button', text: v, onclick: function() { f.value = v; f.picked = true; touch(); } })); });
+        btns.appendChild(el('button', { type: 'button', 'class': 'link', text: '絞り込みを外す', onclick: function() { s.filters.splice(i, 1); touch(); } }));
+        box.appendChild(btns);
+        fcell.appendChild(box);
+      }
+    });
+    fcell.appendChild(filterAdder());
+    grid.appendChild(el('div', { 'class': 'k', text: '絞り込み' })); grid.appendChild(fcell);
+
+    // 切り口
+    var gcell = el('div', { 'class': 'row' });
+    var allowed = metricOf(s.metric).allowed_group_by;
+    OPTIONS.dimensions.forEach(function(d) {
+      if (allowed.indexOf(d.dim) < 0) return;
+      var on = s.group_by.indexOf(d.dim) >= 0;
+      var full = s.group_by.length >= OPTIONS.limits.max_group_by;
+      var cb = el('input', { type: 'checkbox', checked: on, disabled: !on && full, onchange: function(e) {
+        if (e.target.checked) s.group_by.push(d.dim); else s.group_by.splice(s.group_by.indexOf(d.dim), 1);
+        touch();
+      } });
+      gcell.appendChild(el('label', {}, [cb, d.label + '別']));
+    });
+    grid.appendChild(el('div', { 'class': 'k', text: '切り口' })); grid.appendChild(gcell);
+
+    // 比較
+    var cmp = el('select', { onchange: function(e) { s.compare = e.target.value || null; touch(); } });
+    cmp.appendChild(el('option', { value: '', selected: !s.compare, text: 'なし' }));
+    OPTIONS.compares.forEach(function(o) { cmp.appendChild(el('option', { value: o.compare, selected: o.compare === s.compare, text: o.label + 'と比較' })); });
+    grid.appendChild(el('div', { 'class': 'k', text: '比較' })); grid.appendChild(el('div', {}, [cmp]));
+
+    // 上位・下位
+    if (s.group_by.length) {
+      if (!s.compare && s.order.by !== 'value') s.order.by = 'value';
+      var rk = el('div', { 'class': 'row' });
+      rk.appendChild(el('label', {}, [el('input', { type: 'checkbox', checked: s.ranking, onchange: function(e) { s.ranking = e.target.checked; touch(); } }), '上位・下位に絞る']));
+      if (s.ranking) {
+        var by = el('select', { onchange: function(e) { s.order.by = e.target.value; touch(); } });
+        [['value', '値'], ['diff', '差'], ['rate', '増減率']].forEach(function(o) {
+          if (o[0] !== 'value' && !s.compare) return;
+          by.appendChild(el('option', { value: o[0], selected: o[0] === s.order.by, text: o[1] }));
+        });
+        var dir = el('select', { onchange: function(e) { s.order.dir = e.target.value; touch(); } });
+        dir.appendChild(el('option', { value: 'desc', selected: s.order.dir === 'desc', text: '大きい順' }));
+        dir.appendChild(el('option', { value: 'asc', selected: s.order.dir === 'asc', text: '小さい順' }));
+        var lim = el('input', { type: 'number', min: 1, max: OPTIONS.limits.max_ranking_limit, value: s.limit, style: 'width:5em',
+          onchange: function(e) { s.limit = Math.max(1, Math.min(OPTIONS.limits.max_ranking_limit, parseInt(e.target.value, 10) || 10)); touch(); } });
+        rk.appendChild(by); rk.appendChild(dir); rk.appendChild(lim); rk.appendChild(document.createTextNode('件'));
+      }
+      grid.appendChild(el('div', { 'class': 'k', text: '並び順' })); grid.appendChild(rk);
+    }
+
+    var card = el('div', { 'class': 'card' }, [grid]);
+    if (r.notes.length) {
+      var ul = el('ul', { 'class': 'notes' });
+      r.notes.forEach(function(n) { ul.appendChild(el('li', { text: n })); });
+      card.appendChild(ul);
+    }
+    var pending = s.filters.some(function(f) { return !f.value; });
+    var badPeriod = !s.start || !s.end || s.start > s.end;
+    var actions = el('div', { 'class': 'actions' }, [
+      el('button', { type: 'button', 'class': 'primary', disabled: pending || badPeriod, text: 'この条件で実行', onclick: execute })
+    ]);
+    if (pending) actions.appendChild(el('span', { 'class': 'note', text: '候補を選ぶか、絞り込みを外してください。' }));
+    else if (badPeriod) actions.appendChild(el('span', { 'class': 'note', text: '期間の開始と終了を確認してください。' }));
+    else if (r.estimated_bytes !== undefined && !s.edited) actions.appendChild(el('span', { 'class': 'note', text: '読み込み見積もり ' + fmtBytes(r.estimated_bytes) }));
+    card.appendChild(actions);
+    clear('conditions').appendChild(card);
+  }
+
+  function filterAdder() {
+    var dimSel = el('select', {});
+    ['factory', 'product', 'customer'].forEach(function(d) { dimSel.appendChild(el('option', { value: d, text: dimLabel(d) })); });
+    var valSel = el('select', {});
+    var fill = function() {
+      valSel.innerHTML = '';
+      OPTIONS.masters[dimSel.value].forEach(function(v) { valSel.appendChild(el('option', { value: v, text: v })); });
+    };
+    dimSel.onchange = fill; fill();
+    return el('div', { 'class': 'row', style: 'margin-top:4px' }, [
+      dimSel, valSel,
+      el('button', { type: 'button', text: '絞り込みを追加', onclick: function() {
+        var exists = STATE.filters.some(function(f) { return f.dim === dimSel.value && f.value === valSel.value; });
+        if (!exists) STATE.filters.push({ dim: dimSel.value, text: valSel.value, value: valSel.value, via: 'exact', candidates: [], picked: true });
+        STATE.edited = true; renderConditions();
+      } })
+    ]);
+  }
+
+  // ---------------- 段階2: 実行 ----------------
+  function buildCondition() {
+    var s = STATE;
+    var period = (s.start === s.origStart && s.end === s.origEnd) ? s.periodToken
+      : (s.start === s.end ? 'month(' + s.start + ')' : 'range(' + s.start + ',' + s.end + ')');
+    var ranking = s.ranking && s.group_by.length > 0;
+    return {
+      metric: s.metric,
+      period: period,
+      filters: s.filters.map(function(f) { return { dim: f.dim, value: f.value }; }),
+      group_by: s.group_by.slice(),
+      compare: s.compare || null,
+      order: ranking ? { by: s.order.by, dir: s.order.dir } : null,
+      limit: ranking ? s.limit : null
+    };
+  }
+
+  function execute() {
+    var cond = buildCondition();
+    var choices = {
+      metric_changed: STATE.metric !== STATE.originalMetric ? { from: STATE.originalMetric, to: STATE.metric } : null,
+      picked_values: STATE.filters.filter(function(f) { return f.picked; }).map(function(f) { return { dim: f.dim, text: f.text, value: f.value }; }),
+      edited: STATE.edited
+    };
+    clear('result');
+    setStatus('集計しています…');
+    google.script.run.withSuccessHandler(function(res) {
+      setStatus('');
+      if (res.status !== 'ok') return showError('result', res.message);
+      renderResult(res);
+    }).withFailureHandler(function(e) { setStatus(''); showError('result', e.message); }).nlExecute(INTERP.request_id, cond, choices);
+  }
+
+  function renderResult(res) {
+    var m = metricOf(res.condition.metric);
+    var parts = [m.label, res.period.label];
+    res.condition.filters.forEach(function(f) { parts.push(f.value); });
+    if (res.condition.group_by.length) parts.push(res.condition.group_by.map(function(d) { return dimLabel(d) + '別'; }).join('・'));
+    if (res.compare_period) parts.push(compareLabel(res.condition.compare) + '（' + res.compare_period.label + '）と比較');
+    var unit = { yen: '単位: 円', yen_per_kg: '単位: 円/kg', percent: '' }[m.format];
+
+    var table = el('table', {});
+    var head = el('tr', {});
+    res.columns.forEach(function(c) { head.appendChild(el('th', { 'class': c.format === 'text' || c.format === 'month' ? '' : 'num', text: c.label })); });
+    table.appendChild(el('thead', {}, [head]));
+    var body = el('tbody', {});
+    res.rows.forEach(function(row) {
+      var tr = el('tr', {});
+      row.forEach(function(v, i) {
+        var col = res.columns[i];
+        var signed = col.key === 'diff' || col.key === 'rate';
+        var td = el('td', { 'class': col.format === 'text' || col.format === 'month' ? '' : 'num', text: fmt(v, col.format, signed) });
+        if (signed && v !== null && v !== 0) td.className += v > 0 ? ' pos' : ' neg';
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+    table.appendChild(body);
+
+    var card = el('div', { 'class': 'card' }, [
+      el('div', { 'class': 'summary', text: parts.join(' / ') }),
+      res.rows.length ? el('div', { 'class': 'tablewrap' }, [table]) : el('div', { text: '該当するデータがありません。' }),
+      el('div', { 'class': 'note', text: [unit, res.truncated ? '先頭' + res.rows.length + '行まで表示' : res.rows.length + '行', '読み込み ' + fmtBytes(res.bytes)].filter(Boolean).join(' ・ ') }),
+      el('details', {}, [el('summary', { text: '実行した SQL を見る' }), el('pre', { text: res.sql })])
+    ]);
+    clear('result').appendChild(card);
+  }
+
+  function fmt(v, format, signed) {
+    if (v === null || v === undefined || v === '') return '—';
+    if (format === 'month') return v.slice(0, 4) + '年' + Number(v.slice(5, 7)) + '月';
+    if (format === 'text') return v;
+    var sign = signed && v > 0 ? '+' : '';
+    if (format === 'percent') return sign + (v * 100).toFixed(1) + '%';
+    if (format === 'yen_per_kg') return sign + v.toLocaleString('ja-JP', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    return sign + Math.round(v).toLocaleString('ja-JP');
+  }
+</script>
+</body>
+</html>

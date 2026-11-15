@@ -4,9 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## プロジェクト概要
 
-原価管理App（cost-mgmt-prod）。現時点ではディレクトリは空でコードベースは未着手のため、
-ビルド／テスト／実行コマンドやアーキテクチャの記載はまだありません。コードが追加され次第、
-このセクションを更新してください。
+原価管理App（cost-mgmt-prod）。構成・フォルダ構造・機能・データの流れ・コマンドは
+[docs/構成ガイド.md](docs/構成ガイド.md) を参照すること。構成や機能を変えたときは、このガイドも更新する。
 
 ## Git運用ルール
 
