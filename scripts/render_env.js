@@ -5,8 +5,8 @@
 //         別の設定ファイルを使うとき: node scripts/render_env.js config/env.顧客名.json
 //
 // 作るもの:
-//   GAS/0X_*/環境設定_自動生成.gs   各 GAS が使う ID（const ENV）
-//   GAS/04・05/.clasp.json         clasp の反映先（scriptId）
+//   GAS/*/環境設定_自動生成.gs     各 GAS が使う ID（const ENV）
+//   GAS/*/.clasp.json              clasp の反映先（scriptId）
 //   .mcp.json                      Claude Code から BigQuery を読む設定
 //   build/sql/*.sql, build/prompts/*.md
 //                                  sql/・prompts/ の {{PROJECT_ID}} などを実際の値にしたもの
@@ -81,25 +81,37 @@ function renderAll(envPath) {
   const g = env.gas;
   const written = [];
 
-  const gasEnvs = {
-    'GAS/01_ファイル登録': { SOURCE_CONFIG_SPREADSHEET_ID: g.fileUpload.sourceConfigSpreadsheetId },
-    'GAS/02_中間S生成': {
-      CONFIG_SPREADSHEET_ID: g.staging.configSpreadsheetId,
-      INPUT_FOLDER_ID: g.staging.inputFolderId,
-      PROCESSED_FOLDER_ID: g.staging.processedFolderId,
-      OUTPUT_SPREADSHEET_ID: g.staging.outputSpreadsheetId
+  // フォルダ = Apps Script のプロジェクト1つ。02（中間S生成）と 03（DataRoad）は
+  // 同じプロジェクト「取込・整形App」に入っているため、1フォルダ・1つの ENV にまとめる。
+  const gasProjects = {
+    'GAS/01_ファイル登録': {
+      scriptId: g.fileUpload.scriptId,
+      env: { SOURCE_CONFIG_SPREADSHEET_ID: g.fileUpload.sourceConfigSpreadsheetId }
     },
-    'GAS/03_DataRoad': { SPREADSHEET_ID: g.dataRoad.spreadsheetId },
-    'GAS/04_閾値超過アラート': { PROJECT_ID: env.gcp.projectId, LOCATION: env.gcp.location },
-    'GAS/05_自然言語検索': { PROJECT_ID: env.gcp.projectId, LOCATION: env.gcp.location }
+    'GAS/02-03_取込・整形App': {
+      scriptId: g.importApp.scriptId,
+      env: {
+        CONFIG_SPREADSHEET_ID: g.importApp.configSpreadsheetId,
+        INPUT_FOLDER_ID: g.importApp.inputFolderId,
+        PROCESSED_FOLDER_ID: g.importApp.processedFolderId,
+        OUTPUT_SPREADSHEET_ID: g.importApp.outputSpreadsheetId,
+        DATAROAD_SPREADSHEET_ID: g.importApp.dataRoadSpreadsheetId
+      }
+    },
+    'GAS/04_閾値超過アラート': {
+      scriptId: g.alert.scriptId,
+      env: { PROJECT_ID: env.gcp.projectId, LOCATION: env.gcp.location }
+    },
+    'GAS/05_自然言語検索': {
+      scriptId: g.nlSearch.scriptId,
+      env: { PROJECT_ID: env.gcp.projectId, LOCATION: env.gcp.location }
+    }
   };
-  Object.keys(gasEnvs).forEach((dir) => {
-    write(dir + '/環境設定_自動生成.gs', gasEnvFile(env, gasEnvs[dir]), written);
-  });
-
   const clasp = (scriptId) => JSON.stringify({ scriptId: scriptId, fileExtension: 'gs' }, null, 2) + '\n';
-  write('GAS/04_閾値超過アラート/.clasp.json', clasp(g.alert.scriptId), written);
-  write('GAS/05_自然言語検索/.clasp.json', clasp(g.nlSearch.scriptId), written);
+  Object.keys(gasProjects).forEach((dir) => {
+    write(dir + '/環境設定_自動生成.gs', gasEnvFile(env, gasProjects[dir].env), written);
+    write(dir + '/.clasp.json', clasp(gasProjects[dir].scriptId), written);
+  });
 
   const mcp = {
     mcpServers: {

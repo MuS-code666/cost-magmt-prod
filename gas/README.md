@@ -2,9 +2,18 @@
 
 Apps Script のコードをこのリポジトリで編集し、コマンドで Apps Script に反映する。変更履歴は Git に残る。
 
-現在 clasp で反映できるのは `04_閾値超過アラート` と `05_自然言語検索`（`01`〜`03` は従来どおり）。
+フォルダ1つが Apps Script のプロジェクト1つに対応する。4つとも clasp で反映する。
 
-プロジェクト ID やスプレッドシート ID などの環境ごとの値は、コードに直接書かず `config/env.json` に書く。各フォルダの `環境設定_自動生成.gs`（`const ENV`）と `.clasp.json` は、そこから `npm run env:render` で作る（手で編集しない）。`01`〜`03` はエディタで直接管理しているため、値を変えたら `環境設定_自動生成.gs` の中身をエディタの同名ファイルに貼り付ける。
+| フォルダ | Apps Script のプロジェクト | 状態の確認 | 反映 |
+| --- | --- | --- | --- |
+| `01_ファイル登録` | アップロード画面app（Web アプリ） | `npm run gas:status:upload` | `npm run gas:push:upload` |
+| `02-03_取込・整形App` | 取込・整形App（02 中間S生成と 03 DataRoad の2ファイル） | `npm run gas:status:import` | `npm run gas:push:import` |
+| `04_閾値超過アラート` | 原価アラート | `npm run gas:status` | `npm run gas:push` |
+| `05_自然言語検索` | 原価 自然言語検索（Web アプリ） | `npm run gas:status:nl` | `npm run gas:push:nl` |
+
+プロジェクト ID やスプレッドシート ID などの環境ごとの値は、コードに直接書かず `config/env.json` に書く。各フォルダの `環境設定_自動生成.gs`（`const ENV`）と `.clasp.json` は、そこから `npm run env:render` で作る（手で編集しない）。反映のコマンドは、先に `env:render` を自動で実行する。
+
+**Web アプリ（01・05）は、反映しただけでは公開中の版が変わらない。** 動作を確認したら、そのフォルダで `npx clasp list-deployments` で公開中のデプロイ ID（`@HEAD` でないほう）を確かめ、`npx clasp update-deployment <デプロイID> --description "<変更内容>"` で新しい版にする。URL は変わらない。反映前の確認は、`@HEAD` のデプロイ ID の URL の末尾を `/dev` にすると、最新のコードで開ける。
 
 ## 05_自然言語検索 の反映
 
@@ -22,17 +31,17 @@ Apps Script のコードをこのリポジトリで編集し、コマンドで A
 
 ## 修正するたびの流れ
 
-1. `GAS/04_閾値超過アラート/` の `.gs` を編集する（Claude Code に依頼してよい）。
-2. リポジトリ直下で `npm run gas:status` を実行し、反映されるファイルを確認する。
-3. `npm run gas:push` で Apps Script に反映する。
+1. 対象フォルダの `.gs` を編集する（Claude Code に依頼してよい）。
+2. リポジトリ直下で、上の表の「状態の確認」のコマンドを実行し、反映されるファイルを確認する。
+3. 上の表の「反映」のコマンドで Apps Script に反映する。
 4. Apps Script のエディタで、確認したい関数を実行して動作を確認する（例: `testDryRun_2026_08` は送信せずログだけ出す）。
 5. 動作を確認できたら、CLAUDE.md の Git 運用ルールに従い、コミットして push する。
 
 ## 注意
 
-- **push は Apps Script 側のファイルを、手元のファイルで丸ごと置き換える。** Apps Script のエディタで直接編集した内容は、次の push で消える。エディタで直接直した場合は、先に `cd GAS/04_閾値超過アラート && npx clasp pull` で手元に取り込み、内容を確認してからコミットする。
+- **push は Apps Script 側のファイルを、手元のファイルで丸ごと置き換える。** Apps Script のエディタで直接編集した内容は、次の push で消える。エディタで直接直した場合は、先にそのフォルダで `npx clasp pull` を実行して手元に取り込み、内容を確認してからコミットする。
 - トリガーとスクリプトプロパティ（Webhook URL）は push しても変わらない。
-- `npm run gas:*` は `GAS/04_閾値超過アラート/` に移動して clasp を実行する。フォルダを移動せずに `clasp push --project …` と指定すると、clasp のパス検査に弾かれる。
+- `npm run gas:*` は対象フォルダに移動して clasp を実行する。フォルダを移動せずに `clasp push --project …` と指定すると、clasp のパス検査に弾かれる。
 - `.clasp.json` の `scriptId` は場所を示す番号で、認証情報ではないためコミットしてよい。`.clasp.json` は `config/env.json` の `gas.*.scriptId` から自動生成する。`rootDir` は書かない。
 
 ## 別の GAS プロジェクトも反映したい場合

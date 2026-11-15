@@ -22,7 +22,7 @@
 const APP_CONFIG = {
   // スタンドアロンGASでも対象スプレッドシートを確実に開けるよう、IDで開く。
   // ID は 環境設定_自動生成.gs（元は config/env.json）から読む。
-  get spreadsheetId() { return ENV.SPREADSHEET_ID; },
+  get spreadsheetId() { return ENV.DATAROAD_SPREADSHEET_ID; },
   settingsSheetName: '設定'
 };
 
