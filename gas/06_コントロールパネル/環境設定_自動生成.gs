@@ -7,7 +7,7 @@
 const ENV = {
   "ENV_NAME": "自社デモ環境（field2board）",
   "PROJECT_ID": "cost-mgmt-prod-507701",
-  "FILE_UPLOAD_URL": "",
+  "FILE_UPLOAD_URL": "https://script.google.com/a/macros/field2board.com/s/AKfycbyAvvTiJohullhL9FqAsnfO6RsYoBK0AXOBI160PSmwuDc9vBPLiu35U2Rre3dyr7Hw3Q/exec",
   "NL_SEARCH_URL": "https://script.google.com/a/macros/field2board.com/s/AKfycbxcihM5ermgV7DDMj1bstb6U6NEXnaNwt69d1jnHn2ar1U8n4Y3J8IFIIJ-P-bDOid8gQ/exec",
   "DASHBOARD_URL": "",
   "STAGING_SPREADSHEET_ID": "1AYlS1SWV_Ci1Vxl-yQWAel8uiL40LkZBvhWo7HLOgiA",
@@ -19,6 +19,6 @@ const ENV = {
     "importApp": "1C31xhjepmoKZWIg0d7sLqp5P1kLE6b657chBQtjGziye8tEN-p2qRLu0",
     "alert": "1Ndd0cr8ol5McfGq93IPal4OsN4HqS72zn0te_NFfLW_qwl160YoenihY",
     "nlSearch": "1z13khtwjibObh47AAHDphdZUNLb6kStMJko36JPUrabmKqkZwDnqqCh9",
-    "panel": ""
+    "panel": "1rfkMEQe7UOxHHyQQYBa5fFj2gYcbmF2DqT5JMVkrW6W9hZTWz7xwYZLv"
   }
 };
