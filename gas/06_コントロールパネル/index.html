@@ -17,6 +17,7 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.7 "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif; }
   main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
   header.top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
@@ -30,7 +31,7 @@
   .lede { color: var(--ink-soft); margin: 8px 0 0; font-size: 13px; }
 
   .step { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-top: 16px; display: grid; grid-template-columns: 40px 1fr; gap: 0 12px; }
-  .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: bold; }
+  .stepnum { width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: bold; }
   .step-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; min-height: 32px; }
   .step-body { grid-column: 2; }
   .desc { color: var(--ink-soft); font-size: 13px; margin: 4px 0 0; }
@@ -87,7 +88,7 @@
   .modal { background: var(--surface); border-radius: 10px; padding: 20px; max-width: 480px; width: 100%; }
   .modal p { margin: 8px 0 0; font-size: 14px; color: var(--ink-soft); white-space: pre-wrap; }
 
-  @media (max-width: 560px) { .step { grid-template-columns: 1fr; } .num { margin-bottom: 6px; } .step-body { grid-column: 1; } }
+  @media (max-width: 560px) { .step { grid-template-columns: 1fr; } .stepnum { margin-bottom: 6px; } .step-body { grid-column: 1; } }
 </style>
 </head>
 <body>
@@ -104,7 +105,7 @@
 
   <!-- 1 登録 -->
   <section class="step">
-    <div class="num">1</div>
+    <div class="stepnum">1</div>
     <div>
       <div class="step-head"><h2>Excel を登録する</h2><span class="badge" id="badge1">確認中</span></div>
       <p class="desc">現場から届いた Excel（売上・生産・原価・予算など）を、ファイル登録画面からアップロードします。登録したファイルは「取込待ち」になります。</p>
@@ -120,7 +121,7 @@
 
   <!-- 2 取込 -->
   <section class="step">
-    <div class="num">2</div>
+    <div class="stepnum">2</div>
     <div>
       <div class="step-head"><h2>取り込んで整える</h2><span class="badge" id="badge2">確認中</span></div>
       <p class="desc">取込待ちの CSV を検査して中間シートに書きます。おかしな行はエラーとして下に表示し、取り込みません。同じ月を何度取り込んでも重複しません。</p>
@@ -137,7 +138,7 @@
 
   <!-- 3 反映 -->
   <section class="step">
-    <div class="num">3</div>
+    <div class="stepnum">3</div>
     <div>
       <div class="step-head"><h2>BigQuery に反映する</h2><span class="badge" id="badge3">確認中</span></div>
       <p class="desc">中間シートの内容を BigQuery に入れます。マスタ（製品・工場など）は全件入れ替え、毎月の実績は「まだ入っていない月」だけ追加します。</p>
@@ -164,7 +165,7 @@
 
   <!-- 4 確認 -->
   <section class="step">
-    <div class="num">4</div>
+    <div class="stepnum">4</div>
     <div>
       <div class="step-head"><h2>結果を確かめる</h2><span class="badge" id="badge4">任意</span></div>
       <p class="desc" id="alertDesc">反映した月に、予算を大きく超えた製品がないか確かめます。Chat への自動通知は毎月決まった日に届きます。ここでは送らずに中身だけ見られます。</p>
@@ -185,7 +186,7 @@
 
   <!-- 5 分析 -->
   <section class="step">
-    <div class="num">5</div>
+    <div class="stepnum">5</div>
     <div>
       <div class="step-head"><h2>分析する</h2></div>
       <p class="desc">ダッシュボードで全体を見たり、日本語の質問で原価を集計したりできます。</p>
