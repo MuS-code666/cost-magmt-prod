@@ -72,6 +72,8 @@ function testSend_2026_06() { runForMonth_('2026-06-01', true); }
 // 判定と通知
 // ============================================================
 
+// 判定結果を返す（コントロールパネルが画面に出すため）。
+// status: NO_DATA = その月のデータなし / NONE = 閾値超過なし / ALERT = 閾値超過あり
 function runForMonth_(month, send) {
   const total = queryRows_(
     "SELECT COUNT(*) AS n FROM `" + ALERT_CONFIG.PROJECT_ID + "." + ALERT_CONFIG.VIEW + "` " +
@@ -83,18 +85,20 @@ function runForMonth_(month, send) {
       'データ取込が完了しているか確認してください（アラート判定は実行していません）。';
     Logger.log(notice);
     if (send) postToChat_(notice);
-    return;
+    return { month: month, status: 'NO_DATA', message: notice, rows: [], sent: !!send };
   }
 
   const rows = queryRows_(buildAlertSql_(month));
   if (rows.length === 0) {
-    Logger.log(monthLabel_(month) + '：閾値超過なし（通知しません）');
-    return;
+    const none = monthLabel_(month) + '：閾値超過なし（通知しません）';
+    Logger.log(none);
+    return { month: month, status: 'NONE', message: none, rows: [], sent: false };
   }
 
   const message = buildMessage_(month, rows);
   Logger.log(message);
   if (send) postToChat_(message);
+  return { month: month, status: 'ALERT', message: message, rows: rows, sent: !!send };
 }
 
 function buildAlertSql_(month) {

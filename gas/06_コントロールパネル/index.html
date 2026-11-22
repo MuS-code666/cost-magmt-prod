@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --ink: #1b2a41; --ink-soft: #4a5a70; --ink-faint: #6b7a90; --line: #dfe4ec;
+    --accent: #2e6bd6; --accent-soft: #eaf1fc; --warn-bg: #fdf3e3; --warn-line: #e4c27a; --warn-ink: #8a5f12;
+    --bad: #b3402f; --bad-bg: #fbeae6; --good: #2f7d55; --good-bg: #e6f4ec; --code-bg: #eff2f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12181f; --surface: #1a222c; --ink: #e4eaf2; --ink-soft: #a9b6c7; --ink-faint: #8794a9; --line: #2d3948;
+      --accent: #6c9ce8; --accent-soft: #1f2c40; --warn-bg: #2e2718; --warn-line: #7a6230; --warn-ink: #e0b96a;
+      --bad: #e8806f; --bad-bg: #37201c; --good: #6fbf95; --good-bg: #1b3026; --code-bg: #232d39;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.7 "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  header.top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 17px; margin: 0; }
+  h3 { font-size: 14px; margin: 16px 0 6px; color: var(--ink-soft); }
+  .env { color: var(--ink-faint); font-size: 13px; }
+  .who { font-size: 13px; color: var(--ink-soft); display: flex; gap: 8px; align-items: center; }
+  .role { border-radius: 999px; padding: 1px 10px; font-size: 12px; background: var(--accent-soft); color: var(--accent); }
+  .role.admin { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); }
+  .lede { color: var(--ink-soft); margin: 8px 0 0; font-size: 13px; }
+
+  .step { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-top: 16px; display: grid; grid-template-columns: 40px 1fr; gap: 0 12px; }
+  .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: bold; }
+  .step-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; min-height: 32px; }
+  .step-body { grid-column: 2; }
+  .desc { color: var(--ink-soft); font-size: 13px; margin: 4px 0 0; }
+  .badge { font-size: 12px; border-radius: 999px; padding: 1px 10px; border: 1px solid var(--line); color: var(--ink-faint); }
+  .badge.todo { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink); }
+  .badge.ok { background: var(--good-bg); border-color: transparent; color: var(--good); }
+  .badge.bad { background: var(--bad-bg); border-color: transparent; color: var(--bad); }
+
+  .actions { margin-top: 12px; display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; }
+  button, a.btn { font: inherit; font-size: 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 14px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+  button.primary, a.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { border-color: var(--bad); color: var(--bad); }
+  button:disabled, a.btn.disabled { opacity: .5; cursor: not-allowed; pointer-events: none; }
+  button.small { font-size: 12px; padding: 2px 10px; }
+  select, input[type=month] { font: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+  .admin-only { border-top: 1px dashed var(--line); margin-top: 14px; padding-top: 10px; }
+  .admin-only .label { font-size: 12px; color: var(--warn-ink); margin-bottom: 4px; }
+
+  .note { font-size: 12px; color: var(--ink-faint); margin-top: 6px; }
+  .msg { border-radius: 8px; padding: 10px 12px; margin-top: 12px; font-size: 14px; white-space: pre-wrap; }
+  .msg.info { background: var(--accent-soft); }
+  .msg.ok { background: var(--good-bg); color: var(--good); }
+  .msg.error { background: var(--bad-bg); color: var(--bad); }
+  .msg.warn { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); }
+  .running { display: inline-flex; gap: 8px; align-items: center; color: var(--ink-soft); font-size: 13px; }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .tablewrap { overflow-x: auto; margin-top: 8px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
+  th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th { font-size: 12px; color: var(--ink-faint); font-weight: normal; }
+  td.num, th.num { text-align: right; }
+  td.wrap { white-space: normal; min-width: 14em; }
+  .cell-ok { color: var(--good); text-align: center; }
+  .cell-todo { color: var(--warn-ink); background: var(--warn-bg); text-align: center; font-weight: bold; }
+  .cell-none { color: var(--ink-faint); text-align: center; }
+  details { margin-top: 10px; font-size: 13px; }
+  summary { cursor: pointer; color: var(--accent); }
+  pre { background: var(--code-bg); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; white-space: pre-wrap; margin: 6px 0 0; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+
+  .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-top: 24px; }
+  .card.adminbox { border-color: var(--warn-line); }
+  .linklist { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+  .linklist a { color: var(--accent); }
+  .cmds td { white-space: normal; vertical-align: top; }
+  .cmds td:first-child { width: 30%; }
+  .cmds code { display: inline-block; margin: 2px 0; }
+
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; padding: 16px; }
+  .modal-bg.show { display: flex; }
+  .modal { background: var(--surface); border-radius: 10px; padding: 20px; max-width: 480px; width: 100%; }
+  .modal p { margin: 8px 0 0; font-size: 14px; color: var(--ink-soft); white-space: pre-wrap; }
+
+  @media (max-width: 560px) { .step { grid-template-columns: 1fr; } .num { margin-bottom: 6px; } .step-body { grid-column: 1; } }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div>
+      <h1>原価管理 コントロールパネル</h1>
+      <div class="env" id="envName">読み込み中…</div>
+    </div>
+    <div class="who" id="who"></div>
+  </header>
+  <p class="lede">毎月の作業は、上から順に進めます。各ステップの状態を見て、必要なボタンだけ押してください。</p>
+  <div id="initError"></div>
+
+  <!-- 1 登録 -->
+  <section class="step">
+    <div class="num">1</div>
+    <div>
+      <div class="step-head"><h2>Excel を登録する</h2><span class="badge" id="badge1">確認中</span></div>
+      <p class="desc">現場から届いた Excel（売上・生産・原価・予算など）を、ファイル登録画面からアップロードします。登録したファイルは「取込待ち」になります。</p>
+    </div>
+    <div class="step-body">
+      <div class="actions">
+        <a class="btn primary disabled" id="openUpload" target="_blank" rel="noopener">ファイル登録画面を開く ↗</a>
+        <button id="refresh1" class="small">状態を更新</button>
+      </div>
+      <div id="pending"></div>
+    </div>
+  </section>
+
+  <!-- 2 取込 -->
+  <section class="step">
+    <div class="num">2</div>
+    <div>
+      <div class="step-head"><h2>取り込んで整える</h2><span class="badge" id="badge2">確認中</span></div>
+      <p class="desc">取込待ちの CSV を検査して中間シートに書きます。おかしな行はエラーとして下に表示し、取り込みません。同じ月を何度取り込んでも重複しません。</p>
+    </div>
+    <div class="step-body">
+      <div class="actions">
+        <button class="primary" id="runImport">取込を実行</button>
+        <span id="importRunning"></span>
+      </div>
+      <div id="importResult"></div>
+      <details id="logBox"><summary>直近の取込ログ</summary><div id="recentLogs"></div></details>
+    </div>
+  </section>
+
+  <!-- 3 反映 -->
+  <section class="step">
+    <div class="num">3</div>
+    <div>
+      <div class="step-head"><h2>BigQuery に反映する</h2><span class="badge" id="badge3">確認中</span></div>
+      <p class="desc">中間シートの内容を BigQuery に入れます。マスタ（製品・工場など）は全件入れ替え、毎月の実績は「まだ入っていない月」だけ追加します。</p>
+    </div>
+    <div class="step-body">
+      <div id="matrix"></div>
+      <div class="actions">
+        <button class="primary" id="runLoadAll">未反映の月を反映する</button>
+        <button id="refresh3" class="small">状態を更新</button>
+        <span id="loadRunning"></span>
+      </div>
+      <div class="admin-only" id="loadAdmin" hidden>
+        <div class="label">管理者だけ</div>
+        <div class="actions">
+          <button id="runLoadMasters">マスタだけ更新</button>
+          <select id="reloadMonth"></select>
+          <button class="danger" id="runReload">この月をやり直す</button>
+        </div>
+        <div class="note">データを訂正して取り込み直したときは「この月をやり直す」で、その月の BigQuery のデータを入れ替えます。</div>
+      </div>
+      <div id="loadResult"></div>
+    </div>
+  </section>
+
+  <!-- 4 確認 -->
+  <section class="step">
+    <div class="num">4</div>
+    <div>
+      <div class="step-head"><h2>結果を確かめる</h2><span class="badge" id="badge4">任意</span></div>
+      <p class="desc" id="alertDesc">反映した月に、予算を大きく超えた製品がないか確かめます。Chat への自動通知は毎月決まった日に届きます。ここでは送らずに中身だけ見られます。</p>
+    </div>
+    <div class="step-body">
+      <div class="actions">
+        <input type="month" id="alertMonth">
+        <button class="primary" id="runAlertPreview">閾値超過を確認</button>
+        <button class="danger" id="runAlertSend" hidden>この内容を Chat に送る</button>
+        <span id="alertRunning"></span>
+      </div>
+      <div id="alertResult"></div>
+      <div class="links">
+        <a class="btn disabled" id="openDashboard1" target="_blank" rel="noopener">ダッシュボードを開く ↗</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 分析 -->
+  <section class="step">
+    <div class="num">5</div>
+    <div>
+      <div class="step-head"><h2>分析する</h2></div>
+      <p class="desc">ダッシュボードで全体を見たり、日本語の質問で原価を集計したりできます。</p>
+    </div>
+    <div class="step-body">
+      <div class="links">
+        <a class="btn primary disabled" id="openNl" target="_blank" rel="noopener">自然言語検索を開く ↗</a>
+        <a class="btn disabled" id="openDashboard2" target="_blank" rel="noopener">ダッシュボードを開く ↗</a>
+      </div>
+      <div class="note">月報コメント（Claude が差異の要因と次月アクションを書くもの）は、今は管理者が Claude Code で作ります。このパネルへの追加は次の段階で予定しています。</div>
+    </div>
+  </section>
+
+  <!-- 管理者メニュー -->
+  <section class="card adminbox" id="adminBox" hidden>
+    <h2>管理者メニュー</h2>
+    <p class="desc">設定の変更やコードの修正は、開発用 PC でリポジトリのコマンドを使います。ここには、そのときに開く場所と手順をまとめています。</p>
+
+    <h3>開く場所</h3>
+    <div class="linklist" id="dataLinks"></div>
+    <h3>Apps Script のエディタ</h3>
+    <div class="linklist" id="editorLinks"></div>
+
+    <h3>保守の手順（開発用 PC・リポジトリ直下で実行）</h3>
+    <div class="tablewrap">
+      <table class="cmds">
+        <thead><tr><th>やりたいこと</th><th>コマンド・操作</th></tr></thead>
+        <tbody>
+          <tr><td>ID などの環境の値を変えた</td><td><code>config/env.json</code> を直してから <code>npm run env:render</code></td></tr>
+          <tr><td>GAS のコードを直した</td><td>
+            01 <code>npm run gas:push:upload</code><br>
+            02-03 <code>npm run gas:push:import</code> → 続けて <code>npm run gas:push:panel</code>（パネルに同梱しているため）<br>
+            04 <code>npm run gas:push</code> → 続けて <code>npm run gas:push:panel</code><br>
+            05 <code>npm run gas:push:nl</code><br>
+            06 <code>npm run gas:push:panel</code></td></tr>
+          <tr><td>Web アプリ（01・05・06）を新しい版にする</td><td>そのフォルダで <code>npx clasp list-deployments</code> → <code>npx clasp update-deployment &lt;デプロイID&gt; --description "変更内容"</code>（URL は変わらない）</td></tr>
+          <tr><td>clasp・gcloud のログインが切れた（invalid_rapt など）</td><td><code>npx clasp login</code>／<code>gcloud auth login --force</code>（ブラウザで許可）</td></tr>
+          <tr><td>アラートの自動通知を登録し直す</td><td>「04 原価アラート」のエディタで <code>setupMonthlyTrigger</code> を実行</td></tr>
+          <tr><td>Chat の通知先を変える</td><td>「04 原価アラート」と「06 コントロールパネル」のスクリプトプロパティ <code>CHAT_WEBHOOK_URL</code> を両方とも書き換え、04 のエディタで <code>checkWebhookUrl</code> を実行して確かめる</td></tr>
+          <tr><td>月報コメントを作る</td><td>Claude Code で <code>build/prompts/monthly_report_comment.md</code> を使う。数値は <code>python validate_comment.py</code> で突合</td></tr>
+          <tr><td>新しい顧客の環境を作る</td><td><code>npm run setup -- check</code> → <code>bigquery</code> → <code>iam</code> → <code>gas</code>（それぞれ確認してから <code>--apply</code>）。詳しくは <code>docs/環境構築手順.md</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>このパネルの管理者</h3>
+    <div class="note">管理者は、このスクリプトの所有者と、「06 コントロールパネル」のスクリプトプロパティ <code>PANEL_ADMINS</code> に書いたメールアドレス（カンマ区切り）です。操作の記録は中間テーブルの「パネル操作ログ」シートに残ります。</div>
+    <div class="note" id="adminList"></div>
+  </section>
+</main>
+
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h2 id="modalTitle"></h2>
+    <p id="modalText"></p>
+    <div class="actions" style="justify-content:flex-end">
+      <button id="modalCancel">やめる</button>
+      <button class="primary" id="modalOk">実行する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var INIT = null;
+  var LOAD_STATUS = null;
+  var LAST_PREVIEW = null;   // 送信前に確認した判定結果
+  var BUSY = false;          // 書き込む操作は同時に1つだけ
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function msg(kind, text) { return '<div class="msg ' + kind + '">' + esc(text) + '</div>'; }
+  function running(text) { return '<span class="running"><span class="spinner"></span>' + esc(text) + '</span>'; }
+  function setBadge(id, kind, text) { var b = $(id); b.className = 'badge ' + (kind || ''); b.textContent = text; }
+  function monthLabel(ym) { return ym.slice(0, 4) + '年' + Number(ym.slice(5, 7)) + '月'; }
+
+  // google.script.run を、成功・失敗のコールバックで呼ぶ
+  function call(fn, args, ok, ng) {
+    var r = google.script.run.withSuccessHandler(ok).withFailureHandler(function(e) { ng(e && e.message ? e.message : String(e)); });
+    r[fn].apply(r, args || []);
+  }
+
+  function confirmDialog(title, text, okLabel, onOk) {
+    $('modalTitle').textContent = title;
+    $('modalText').textContent = text;
+    $('modalOk').textContent = okLabel || '実行する';
+    $('modal').classList.add('show');
+    $('modalOk').onclick = function() { $('modal').classList.remove('show'); onOk(); };
+    $('modalCancel').onclick = function() { $('modal').classList.remove('show'); };
+  }
+
+  function setBusy(b) {
+    BUSY = b;
+    ['runImport', 'runLoadAll', 'runLoadMasters', 'runReload', 'runAlertSend'].forEach(function(id) { $(id).disabled = b; });
+  }
+
+  function setLink(id, url) {
+    var a = $(id);
+    if (url) { a.href = url; a.classList.remove('disabled'); }
+    else { a.removeAttribute('href'); a.title = 'URL が未設定です（config/env.json）'; }
+  }
+
+  // ---------------- 起動 ----------------
+  function init() {
+    call('panelInit', [], function(r) {
+      INIT = r;
+      $('envName').textContent = r.envName;
+      $('who').innerHTML = esc(r.user.email) + '<span class="role' + (r.user.isAdmin ? ' admin' : '') + '">' + (r.user.isAdmin ? '管理者' : '担当者') + '</span>';
+      setLink('openUpload', r.links.fileUpload);
+      setLink('openNl', r.links.nlSearch);
+      setLink('openDashboard1', r.links.dashboard);
+      setLink('openDashboard2', r.links.dashboard);
+
+      var a = r.alert;
+      $('alertDesc').textContent = '反映した月に、予算を大きく超えた製品がないか確かめます（部門内ワースト' + a.rankLimit + 'のうち、差異率' + a.minVariancePct +
+        '%以上かつ差異額' + a.minVarianceMan + '万円以上）。Chat への自動通知は毎月' + a.triggerDay + '日 ' + a.triggerHour + '時台に届きます。ここでは送らずに中身だけ見られます。';
+      $('alertMonth').value = a.defaultMonth;
+
+      if (r.user.isAdmin) {
+        $('loadAdmin').hidden = false;
+        $('adminBox').hidden = false;
+        renderAdmin(r.admin);
+      }
+      loadImportStatus();
+      loadLoadStatus();
+    }, function(e) {
+      $('envName').textContent = '';
+      $('initError').innerHTML = msg('error', 'パネルを開けませんでした。\n' + e);
+    });
+  }
+
+  function renderAdmin(admin) {
+    var link = function(l) { return l.url ? '<a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.label) + ' ↗</a>' : '<span class="note">' + esc(l.label) + '（未作成）</span>'; };
+    $('dataLinks').innerHTML = admin.data.map(link).join('');
+    $('editorLinks').innerHTML = admin.editors.map(link).join('');
+    $('adminList').textContent = 'PANEL_ADMINS の設定: ' + (admin.admins.length ? admin.admins.join(', ') : '（未設定。所有者だけが管理者）');
+  }
+
+  // ---------------- 1・2 登録と取込 ----------------
+  function loadImportStatus() {
+    $('pending').innerHTML = running('取込フォルダを確認しています…');
+    call('panelGetImportStatus', [], function(r) {
+      renderPending(r.pending);
+      $('recentLogs').innerHTML = logTable(r.logs) || '<div class="note">まだ取込ログはありません。</div>';
+    }, function(e) {
+      $('pending').innerHTML = msg('error', '取込フォルダを確認できませんでした。\n' + e);
+      setBadge('badge1', 'bad', '確認できません');
+      setBadge('badge2', 'bad', '確認できません');
+    });
+  }
+
+  function renderPending(files) {
+    if (!files.length) {
+      $('pending').innerHTML = '<div class="note">取込待ちのファイルはありません。</div>';
+      setBadge('badge1', '', '取込待ちなし');
+      setBadge('badge2', 'ok', '取り込むものなし');
+      return;
+    }
+    var unknown = files.filter(function(f) { return !f.recognized; }).length;
+    setBadge('badge1', 'ok', '取込待ち ' + files.length + '件');
+    setBadge('badge2', 'todo', '取込が必要');
+    $('pending').innerHTML =
+      '<div class="tablewrap"><table><thead><tr><th>取込待ちのファイル</th><th>種類</th><th>更新日時</th></tr></thead><tbody>' +
+      files.map(function(f) {
+        return '<tr><td>' + esc(f.name) + '</td><td>' + (f.recognized ? esc(f.source) : '<span class="pos" style="color:var(--bad)">判定できない</span>') + '</td><td>' + esc(f.updated) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      (unknown ? msg('warn', '種類を判定できないファイルが' + unknown + '件あります。ファイル名のつけ方が「取込_設定シート」の判定条件と合っていません。取込では読み飛ばされます。') : '');
+  }
+
+  function logTable(logs) {
+    if (!logs || !logs.length) return '';
+    return '<div class="tablewrap"><table><thead><tr><th>処理日時</th><th>ファイル</th><th>期間</th><th class="num">正常</th><th class="num">エラー</th><th>結果</th><th>メッセージ</th></tr></thead><tbody>' +
+      logs.map(function(l) {
+        var cls = l.status === 'SUCCESS' ? 'ok' : l.status === 'SKIP' ? '' : l.status === 'WARNING' ? 'todo' : 'bad';
+        var label = { SUCCESS: '成功', WARNING: '一部エラー', ERROR: '失敗', SKIP: '対象外' }[l.status] || l.status;
+        return '<tr><td>' + esc(l.at) + '</td><td>' + esc(l.file) + '</td><td>' + esc(l.period) + '</td><td class="num">' + l.success + '</td><td class="num">' + l.error +
+          '</td><td><span class="badge ' + cls + '">' + esc(label) + '</span></td><td class="wrap">' + esc(l.message) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+
+  function errorTable(errors) {
+    if (!errors || !errors.length) return '';
+    return '<h3>取り込まなかった行（' + errors.length + '行）</h3><div class="tablewrap"><table><thead><tr><th>ファイル</th><th class="num">CSV行</th><th>項目</th><th>元の値</th><th>理由</th></tr></thead><tbody>' +
+      errors.slice(0, 100).map(function(e) {
+        return '<tr><td>' + esc(e.file) + '</td><td class="num">' + esc(e.csvRow) + '</td><td>' + esc(e.field) + '</td><td>' + esc(e.raw) + '</td><td class="wrap">' + esc(e.message) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      (errors.length > 100 ? '<div class="note">先頭100行だけ表示しています。すべての行は中間テーブルの「取込エラー」シートにあります。</div>' : '') +
+      '<div class="note">元の Excel を直して、ステップ1から登録し直してください。正しい行は取り込み済みです。</div>';
+  }
+
+  $('runImport').onclick = function() {
+    if (BUSY) return;
+    confirmDialog('取込を実行します', '取込待ちの CSV を検査して中間シートに書きます。処理したファイルは「処理済み」フォルダに移ります。\nファイルが多いと数分かかります。終わるまでこの画面を閉じないでください。', '取込を実行', function() {
+      setBusy(true);
+      $('importRunning').innerHTML = running('取り込んでいます…');
+      $('importResult').innerHTML = '';
+      call('panelRunImport', [], function(r) {
+        setBusy(false);
+        $('importRunning').innerHTML = '';
+        var bad = r.logs.filter(function(l) { return l.status === 'ERROR'; }).length;
+        var head = r.logs.length === 0 ? msg('info', '取り込むファイルはありませんでした。')
+          : r.errors.length || bad ? msg('warn', r.logs.length + 'ファイルを処理しました。取り込めなかった行があります。下の表を確認してください。')
+          : msg('ok', r.logs.length + 'ファイルを取り込みました。次はステップ3で BigQuery に反映してください。');
+        $('importResult').innerHTML = head + logTable(r.logs) + errorTable(r.errors);
+        loadImportStatus();
+        loadLoadStatus();
+      }, function(e) {
+        setBusy(false);
+        $('importRunning').innerHTML = '';
+        $('importResult').innerHTML = msg('error', '取込に失敗しました。\n' + e);
+      });
+    });
+  };
+  $('refresh1').onclick = loadImportStatus;
+
+  // ---------------- 3 反映 ----------------
+  function loadLoadStatus() {
+    $('matrix').innerHTML = running('BigQuery の状態を確認しています…');
+    call('panelGetLoadStatus', [], function(r) {
+      LOAD_STATUS = r;
+      renderMatrix(r.tables);
+    }, function(e) {
+      $('matrix').innerHTML = msg('error', 'BigQuery の状態を確認できませんでした。\n' + e);
+      setBadge('badge3', 'bad', '確認できません');
+    });
+  }
+
+  function renderMatrix(tables) {
+    var all = {};
+    tables.forEach(function(t) { t.stagingMonths.concat(t.loadedMonths).forEach(function(m) { all[m] = true; }); });
+    var months = Object.keys(all).sort();
+    var shown = months.slice(-12);   // 直近12か月だけ表示する
+    var pendingMonths = {};
+    tables.forEach(function(t) {
+      t.stagingMonths.forEach(function(m) { if (t.loadedMonths.indexOf(m) < 0) pendingMonths[m] = true; });
+    });
+    var pendingList = Object.keys(pendingMonths).sort();
+
+    var html = '<div class="tablewrap"><table><thead><tr><th>データ</th>' +
+      shown.map(function(m) { return '<th class="num">' + m.slice(2, 4) + '/' + m.slice(5) + '</th>'; }).join('') + '</tr></thead><tbody>';
+    tables.forEach(function(t) {
+      html += '<tr><td>' + esc(t.label) + '</td>' + shown.map(function(m) {
+        var inBq = t.loadedMonths.indexOf(m) >= 0;
+        var inStg = t.stagingMonths.indexOf(m) >= 0;
+        if (inStg && !inBq) return '<td class="cell-todo" title="中間シートにあり、BigQuery に未反映">未</td>';
+        if (inBq) return '<td class="cell-ok" title="BigQuery に反映済み">✓</td>';
+        return '<td class="cell-none">–</td>';
+      }).join('') + '</tr>';
+    });
+    html += '</tbody></table></div><div class="note">✓ = BigQuery に反映済み　未 = 中間シートにあるが未反映　– = データなし' +
+      (months.length > shown.length ? '（直近12か月を表示）' : '') + '</div>';
+    var errs = tables.filter(function(t) { return t.error && t.loadedMonths.length === 0; });
+    if (errs.length) html += '<details><summary>中間シートを読めなかった表（' + errs.length + '）</summary><pre>' + esc(errs.map(function(t) { return t.label + ': ' + t.error; }).join('\n')) + '</pre></details>';
+    $('matrix').innerHTML = html;
+
+    if (pendingList.length) setBadge('badge3', 'todo', '未反映 ' + pendingList.map(monthLabel).join('・'));
+    else setBadge('badge3', 'ok', 'すべて反映済み');
+
+    var sel = $('reloadMonth');
+    sel.innerHTML = months.slice().reverse().map(function(m) { return '<option value="' + m + '">' + monthLabel(m) + '</option>'; }).join('');
+  }
+
+  function runLoad(kind, ym, title, text, okLabel) {
+    if (BUSY) return;
+    confirmDialog(title, text, okLabel, function() {
+      setBusy(true);
+      $('loadRunning').innerHTML = running('BigQuery に反映しています…（数分かかることがあります）');
+      $('loadResult').innerHTML = '';
+      call('panelRunLoad', [kind, ym], function(r) {
+        setBusy(false);
+        $('loadRunning').innerHTML = '';
+        var head = r.ok ? msg('ok', '反映が終わりました。') : msg('error', '途中で止まりました。\n' + r.error);
+        $('loadResult').innerHTML = head + (r.messages.length ? '<details' + (r.ok ? '' : ' open') + '><summary>処理の記録（' + r.messages.length + '行）</summary><pre>' + esc(r.messages.join('\n')) + '</pre></details>' : '');
+        loadLoadStatus();
+      }, function(e) {
+        setBusy(false);
+        $('loadRunning').innerHTML = '';
+        $('loadResult').innerHTML = msg('error', '反映に失敗しました。\n' + e);
+      });
+    });
+  }
+
+  $('runLoadAll').onclick = function() {
+    runLoad('all', '', 'BigQuery に反映します', 'マスタを全件入れ替え、BigQuery にまだ入っていない月を追加します。すでに入っている月は変えません。\n終わるまでこの画面を閉じないでください。', '反映する');
+  };
+  $('runLoadMasters').onclick = function() {
+    runLoad('masters', '', 'マスタだけ更新します', 'マスタ9表（製品・顧客・工場など）を、中間シートの内容で全件入れ替えます。毎月の実績は変えません。', 'マスタを更新');
+  };
+  $('runReload').onclick = function() {
+    var ym = $('reloadMonth').value;
+    if (!ym) return;
+    runLoad('reload', ym, monthLabel(ym) + ' をやり直します', monthLabel(ym) + ' の実績データを、BigQuery から消して中間シートの内容で入れ直します。\n中間シートにその月のデータがない表は、そのまま残します。', 'やり直す');
+  };
+  $('refresh3').onclick = loadLoadStatus;
+
+  // ---------------- 4 確認 ----------------
+  $('runAlertPreview').onclick = function() {
+    var ym = $('alertMonth').value;
+    if (!ym) return;
+    $('alertRunning').innerHTML = running('判定しています…');
+    $('alertResult').innerHTML = '';
+    $('runAlertSend').hidden = true;
+    call('panelAlertPreview', [ym], function(r) {
+      $('alertRunning').innerHTML = '';
+      LAST_PREVIEW = { ym: ym, result: r };
+      renderAlert(r, false);
+    }, function(e) {
+      $('alertRunning').innerHTML = '';
+      $('alertResult').innerHTML = msg('error', '判定できませんでした。\n' + e);
+    });
+  };
+
+  function renderAlert(r, sent) {
+    var html;
+    if (r.status === 'NO_DATA') { html = msg('warn', r.message); setBadge('badge4', 'todo', 'データなし'); }
+    else if (r.status === 'NONE') { html = msg('ok', r.message); setBadge('badge4', 'ok', '閾値超過なし'); }
+    else {
+      setBadge('badge4', 'bad', '閾値超過 ' + r.rows.length + '件');
+      html = msg('warn', '閾値を超えた製品が' + r.rows.length + '件あります。' + (sent ? 'Chat に送りました。' : '')) +
+        '<div class="tablewrap"><table><thead><tr><th>部門</th><th class="num">順位</th><th>製品</th><th>顧客</th><th class="num">実績(万円)</th><th class="num">予算(万円)</th><th class="num">差異(万円)</th><th class="num">差異率</th></tr></thead><tbody>' +
+        r.rows.map(function(x) {
+          return '<tr><td>' + esc(x.factory_name) + '</td><td class="num">' + esc(x.rank) + '</td><td>' + esc(x.product_name) + '</td><td>' + esc(x.customer_name) +
+            '</td><td class="num">' + esc(x.total_cost_man) + '</td><td class="num">' + esc(x.budget_cost_man) + '</td><td class="num" style="color:var(--bad)">+' + esc(x.variance_man) +
+            '</td><td class="num" style="color:var(--bad)">+' + esc(x.variance_pct) + '%</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        '<details><summary>Chat に送る文面</summary><pre>' + esc(r.message) + '</pre></details>';
+    }
+    $('alertResult').innerHTML = html;
+    $('runAlertSend').hidden = !(INIT.user.isAdmin && r.status === 'ALERT' && !sent);
+  }
+
+  $('runAlertSend').onclick = function() {
+    if (BUSY || !LAST_PREVIEW) return;
+    var ym = LAST_PREVIEW.ym;
+    if (!INIT.alert.webhookConfigured) {
+      $('alertResult').insertAdjacentHTML('beforeend', msg('error', 'このパネルのスクリプトプロパティ CHAT_WEBHOOK_URL が未設定のため送れません（管理者メニューの手順を参照）。'));
+      return;
+    }
+    confirmDialog(monthLabel(ym) + ' のアラートを送ります', '上の内容を Google Chat に送ります。毎月の自動通知とは別に、もう1通届きます。', 'Chat に送る', function() {
+      setBusy(true);
+      $('alertRunning').innerHTML = running('送信しています…');
+      call('panelAlertSend', [ym], function(r) {
+        setBusy(false);
+        $('alertRunning').innerHTML = '';
+        renderAlert(r, r.sent);
+      }, function(e) {
+        setBusy(false);
+        $('alertRunning').innerHTML = '';
+        $('alertResult').insertAdjacentHTML('beforeend', msg('error', '送信に失敗しました。\n' + e));
+      });
+    });
+  };
+
+  init();
+</script>
+</body>
+</html>

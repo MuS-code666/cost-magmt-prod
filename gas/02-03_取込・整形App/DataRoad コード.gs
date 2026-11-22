@@ -11,6 +11,7 @@
  *
  *   3) reloadSpecifiedHistoryMonth()
  *      「設定」シートで指定した1か月だけ洗い替え
+ *      （コントロールパネルからは年・月を引数で渡す）
  *
  *   4) loadAllToBigQuery()
  *      マスタ更新 → 新規ヒストリー月追加
@@ -114,12 +115,19 @@ function loadNewHistoryMonths() {
  * （1ソースだけを訂正・再アップロードした場合でも実行できるようにするため）。
  * 6表すべてにデータがない場合のみエラーとする。
  */
-function reloadSpecifiedHistoryMonth() {
+function reloadSpecifiedHistoryMonth(yearArg, monthArg) {
   const ctx = getContext_();
   const specs = getHistorySpecs_();
 
-  const year = ctx.cfg.reloadYear;
-  const month = ctx.cfg.reloadMonth;
+  // 年・月を引数で渡されたら（コントロールパネルから呼ぶとき）それを使い、
+  // 渡されなければ（エディタから実行するとき）「設定」シートの RELOAD_YEAR・RELOAD_MONTH を使う。
+  const fromArgs = typeof yearArg === 'number' && typeof monthArg === 'number';
+  const year = fromArgs ? yearArg : ctx.cfg.reloadYear;
+  const month = fromArgs ? monthArg : ctx.cfg.reloadMonth;
+  if (!Number.isInteger(year) || year < 2000 || year > 2100 ||
+      !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error('やり直す年月が正しくありません: ' + year + '年' + month + '月');
+  }
   const monthKey = formatMonthKey_(year, month);
 
   // 書込み前に全表を読み切ってから判定する（途中まで更新される状態を避けるため）。

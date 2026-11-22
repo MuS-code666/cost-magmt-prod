@@ -15,3 +15,7 @@ node_modules/
 
 # 環境ごとの生成物（npm run env:render で作る。BigQuery に貼る SQL など）
 build/
+
+# コントロールパネルに同梱する 02-03・04 のコード（node scripts/build_panel.js で作る）
+gas/06_コントロールパネル/同梱_*.gs
+GAS/06_コントロールパネル/同梱_*.gs

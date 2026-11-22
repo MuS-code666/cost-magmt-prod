@@ -2,7 +2,7 @@
 
 Apps Script のコードをこのリポジトリで編集し、コマンドで Apps Script に反映する。変更履歴は Git に残る。
 
-フォルダ1つが Apps Script のプロジェクト1つに対応する。4つとも clasp で反映する。
+フォルダ1つが Apps Script のプロジェクト1つに対応する。5つとも clasp で反映する。
 
 | フォルダ | Apps Script のプロジェクト | 状態の確認 | 反映 |
 | --- | --- | --- | --- |
@@ -10,10 +10,20 @@ Apps Script のコードをこのリポジトリで編集し、コマンドで A
 | `02-03_取込・整形App` | 取込・整形App（02 中間S生成と 03 DataRoad の2ファイル） | `npm run gas:status:import` | `npm run gas:push:import` |
 | `04_閾値超過アラート` | 原価アラート | `npm run gas:status` | `npm run gas:push` |
 | `05_自然言語検索` | 原価 自然言語検索（Web アプリ） | `npm run gas:status:nl` | `npm run gas:push:nl` |
+| `06_コントロールパネル` | 原価管理 コントロールパネル（Web アプリ） | `npm run gas:status:panel` | `npm run gas:push:panel` |
 
 プロジェクト ID やスプレッドシート ID などの環境ごとの値は、コードに直接書かず `config/env.json` に書く。各フォルダの `環境設定_自動生成.gs`（`const ENV`）と `.clasp.json` は、そこから `npm run env:render` で作る（手で編集しない）。反映のコマンドは、先に `env:render` を自動で実行する。
 
-**Web アプリ（01・05）は、反映しただけでは公開中の版が変わらない。** 動作を確認したら、そのフォルダで `npx clasp list-deployments` で公開中のデプロイ ID（`@HEAD` でないほう）を確かめ、`npx clasp update-deployment <デプロイID> --description "<変更内容>"` で新しい版にする。URL は変わらない。反映前の確認は、`@HEAD` のデプロイ ID の URL の末尾を `/dev` にすると、最新のコードで開ける。
+**Web アプリ（01・05・06）は、反映しただけでは公開中の版が変わらない。** 動作を確認したら、そのフォルダで `npx clasp list-deployments` で公開中のデプロイ ID（`@HEAD` でないほう）を確かめ、`npx clasp update-deployment <デプロイID> --description "<変更内容>"` で新しい版にする。URL は変わらない。反映前の確認は、`@HEAD` のデプロイ ID の URL の末尾を `/dev` にすると、最新のコードで開ける。
+
+## 06_コントロールパネル の反映
+
+- パネルは、02-03 と 04 のコードを反映のたびに同梱する。`npm run gas:push:panel` が `scripts/build_panel.js` を実行し、各フォルダの `.gs` を1つの関数で包んだ `同梱_取込・整形App.gs`（`ImportApp`）と `同梱_原価アラート.gs`（`AlertApp`）を作ってから push する。同梱ファイルは手で編集せず、Git にも入れない。
+- **02-03 か 04 を直したら、それぞれの push に続けて `npm run gas:push:panel` も実行し、パネルのデプロイも新しい版にする。** しないと、パネルだけ古いコードで動く。
+- パネルから呼べるのは、各フォルダの `パネル連携.gs` にある `panel` で始まる関数だけ（`_` で終わるものは内部用）。パネルに機能を足すときは、まず `パネル連携.gs` に関数を足し、`06_コントロールパネル/コード.gs` で権限を確かめてから呼ぶ。
+- 同梱したコードは 06 のプロジェクトとして動く。スクリプトプロパティ（`CHAT_WEBHOOK_URL`）やスクリプトのロックは 06 のものを使う。
+- スクリプトプロパティ `PANEL_ADMINS` に、管理者のメールアドレスをカンマ区切りで入れる（所有者は書かなくても管理者）。管理者だけが、マスタだけの更新、指定月のやり直し、Chat への送信を使える。
+- 操作の記録は、中間テーブルのスプレッドシートの「パネル操作ログ」シートに残る（Web アプリは所有者として実行するので、BigQuery 側の記録はすべて所有者になるため）。
 
 ## 05_自然言語検索 の反映
 

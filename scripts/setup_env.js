@@ -16,6 +16,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { loadEnv, renderAll } = require('./render_env');
+const { buildPanel } = require('./build_panel');
 
 const root = path.join(__dirname, '..');
 const args = process.argv.slice(2);
@@ -39,7 +40,9 @@ const GAS_PROJECTS = [
   { key: 'fileUpload', dir: 'GAS/01_ファイル登録', title: 'アップロード画面app' },
   { key: 'importApp', dir: 'GAS/02-03_取込・整形App', title: '取込・整形App' },
   { key: 'alert', dir: 'GAS/04_閾値超過アラート', title: '原価アラート' },
-  { key: 'nlSearch', dir: 'GAS/05_自然言語検索', title: '原価 自然言語検索' }
+  { key: 'nlSearch', dir: 'GAS/05_自然言語検索', title: '原価 自然言語検索' },
+  // パネルは 02-03・04 のコードを同梱してから反映する（scripts/build_panel.js）ので、02-03・04 より後に置く
+  { key: 'panel', dir: 'GAS/06_コントロールパネル', title: '原価管理 コントロールパネル', bundle: true }
 ];
 
 // ---------------------------------------------------------------
@@ -141,7 +144,7 @@ function stepCheck(env, unfilled) {
 
   const scripts = query('npx', ['clasp', 'list-scripts'], { cwd: root });
   GAS_PROJECTS.forEach((g) => {
-    const id = env.gas[g.key].scriptId;
+    const id = (env.gas[g.key] || {}).scriptId;
     const found = id && scripts.out.includes(id);
     add('Apps Script ' + g.title, !!found, !id ? 'scriptId が空（未作成）' : (found ? '' : 'clasp から見えない（未ログインか権限なし）'));
   });
@@ -243,6 +246,7 @@ function stepGas(env, file, unfilled) {
   let created = false;
 
   GAS_PROJECTS.forEach((g) => {
+    env.gas[g.key] = env.gas[g.key] || {};
     if (env.gas[g.key].scriptId) return console.log('  [済み] ' + g.title + '（' + env.gas[g.key].scriptId + '）');
     if (!APPLY) return console.log('  [実行予定] Apps Script のプロジェクト「' + g.title + '」を作り、scriptId を config/env.json に書く\n      npx clasp create-script --type standalone --title ' + quote(g.title));
     // 作業フォルダの appsscript.json を上書きしないよう、一時フォルダで作って scriptId だけ受け取る
@@ -256,6 +260,7 @@ function stepGas(env, file, unfilled) {
     }
     const id = JSON.parse(fs.readFileSync(claspFile, 'utf8')).scriptId;
     fs.rmSync(tmp, { recursive: true, force: true });
+    raw.gas[g.key] = raw.gas[g.key] || {};
     raw.gas[g.key].scriptId = id;
     env.gas[g.key].scriptId = id;
     created = true;
@@ -270,6 +275,7 @@ function stepGas(env, file, unfilled) {
   if (APPLY) renderAll(path.relative(root, file));
   GAS_PROJECTS.forEach((g) => {
     if (!env.gas[g.key].scriptId && APPLY) return;
+    if (g.bundle && APPLY) buildPanel();
     change(g.title + ' にコードを反映する', 'npx', ['--prefix', root, 'clasp', 'push', '--force'], { cwd: path.join(root, g.dir) });
   });
 }

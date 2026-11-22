@@ -109,6 +109,29 @@ function renderAll(envPath) {
     'GAS/05_自然言語検索': {
       scriptId: g.nlSearch.scriptId,
       env: { PROJECT_ID: env.gcp.projectId, LOCATION: env.gcp.location }
+    },
+    // コントロールパネル。02-03 と 04 のコードは scripts/build_panel.js で同梱する（それぞれの ENV ごと）。
+    // ここの ENV は、パネル自身が出すリンクと操作ログの書き先。
+    'GAS/06_コントロールパネル': {
+      scriptId: (g.panel || {}).scriptId || '',
+      env: {
+        ENV_NAME: env.envName,
+        PROJECT_ID: env.gcp.projectId,
+        FILE_UPLOAD_URL: g.fileUpload.webAppUrl || '',
+        NL_SEARCH_URL: g.nlSearch.webAppUrl || '',
+        DASHBOARD_URL: (env.dashboard || {}).lookerStudioUrl || '',
+        STAGING_SPREADSHEET_ID: g.importApp.outputSpreadsheetId,
+        CONFIG_SPREADSHEET_ID: g.importApp.configSpreadsheetId,
+        INPUT_FOLDER_ID: g.importApp.inputFolderId,
+        PROCESSED_FOLDER_ID: g.importApp.processedFolderId,
+        SCRIPT_IDS: {
+          fileUpload: g.fileUpload.scriptId,
+          importApp: g.importApp.scriptId,
+          alert: g.alert.scriptId,
+          nlSearch: g.nlSearch.scriptId,
+          panel: (g.panel || {}).scriptId || ''
+        }
+      }
     }
   };
   const clasp = (scriptId) => JSON.stringify({ scriptId: scriptId, fileExtension: 'gs' }, null, 2) + '\n';
