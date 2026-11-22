@@ -9,7 +9,7 @@ const ENV = {
   "PROJECT_ID": "cost-mgmt-prod-507701",
   "FILE_UPLOAD_URL": "https://script.google.com/a/macros/field2board.com/s/AKfycbyAvvTiJohullhL9FqAsnfO6RsYoBK0AXOBI160PSmwuDc9vBPLiu35U2Rre3dyr7Hw3Q/exec",
   "NL_SEARCH_URL": "https://script.google.com/a/macros/field2board.com/s/AKfycbxcihM5ermgV7DDMj1bstb6U6NEXnaNwt69d1jnHn2ar1U8n4Y3J8IFIIJ-P-bDOid8gQ/exec",
-  "DASHBOARD_URL": "",
+  "DASHBOARD_URL": "https://datastudio.google.com/reporting/7acdc107-d491-4a8e-a53e-809272bd57f9/page/lSK9F",
   "STAGING_SPREADSHEET_ID": "1AYlS1SWV_Ci1Vxl-yQWAel8uiL40LkZBvhWo7HLOgiA",
   "CONFIG_SPREADSHEET_ID": "1mjxPFb9GcbaG780duU6xfTqX0bo3nse4_8S87w8WFOE",
   "INPUT_FOLDER_ID": "1XYdfrXo4qkbhFwzYSBjivOEfzJV1-AEm",
